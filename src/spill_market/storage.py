@@ -186,3 +186,14 @@ class Store:
         with self.connection() as db:
             rows = db.execute("SELECT id FROM runs WHERE status IN ('queued','running')").fetchall()
         return [self.get_run(row[0], internal=True, include_report=False) for row in rows]
+
+    def mark_interrupted_if_owned(self, snapshot: dict) -> bool:
+        """Compare-and-swap: a stale process check cannot undo a terminal commit or resume."""
+        with self.connection() as db:
+            cursor = db.execute("""UPDATE runs SET status='interrupted',error=?,updated_at=?
+                WHERE id=? AND status IN ('queued','running')
+                AND worker_pid IS ? AND worker_created IS ? AND updated_at=?""", (
+                "Worker process is no longer present; checkpoints retained.", utc_now(), snapshot["id"],
+                snapshot.get("worker_pid"), snapshot.get("worker_created"), snapshot["updated_at"],
+            ))
+            return cursor.rowcount == 1

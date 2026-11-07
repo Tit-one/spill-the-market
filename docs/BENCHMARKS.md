@@ -1,24 +1,25 @@
-# Measured workloads
+# Measured complete workloads
 
-Performance evidence is measured on a local Windows machine, not extrapolated from the OASIS paper or a GPU cluster.
+Release kernel: `0.1.0-numeric-9`, measured on AMD Ryzen 7 7435HS (16 logical CPUs),63.7 GiB RAM,Windows build 26300,CPython 3.11.15.
 
-Current release kernel: `0.1.0-numeric-9`. The complete cold benchmark is being qualified before the v0.1 release; final measurements will replace this note.
+Every population ran three price/media candidates plus three price-matched no-campaign controls,30 days,10 exploration and10 validation seeds: **120 complete scenario replicas**. Distinct unweighted numerical individuals, social propagation, fatigue, integer acquisition/cost gates, checkpoints and committed replica result writes were enabled.
 
-## Protocol
+| Individuals | Computed agent-days | Wall seconds | Peak process RSS (MiB) | Retained checkpoint/cache bytes | External API calls |
+|---:|---:|---:|---:|---:|---:|
+| 1,000 | 3,600,000 | 72.843 | 65.54 | 36,538,424 | 0 |
+| 10,000 | 36,000,000 | 185.780 | 70.58 | 36,435,935 | 0 |
+| 100,000 | 360,000,000 | 1052.859 | 123.66 | 35,722,390 | 0 |
 
-- Fictional game, three price/media candidates and three price-matched no-campaign controls.
-- Thirty daily rounds, ten exploration and ten validation seeds: **120 complete scenario replicas** per population.
-- Distinct unweighted numerical individuals, actual social propagation, fatigue, costs, first-purchase gates and checkpoint/result persistence enabled.
-- No external model/search calls in the numeric workload.
-- A new empty measurement directory for every population. Output records zero preexisting results and the actual number of committed replicas. Warm cache reloads are never reported as cold simulated agent-days.
-- Peak RSS is sampled for the benchmark Python process, not the whole machine; reported wall time includes checkpoint/cache work. Other development services may be running, so these are observed local results, not a hardware guarantee.
+The 100,000-person case completed **360 million agent-days in 17 min 32.859 s**, with 123.66 MiB peak process RSS and zero inference/search calls in this numeric workload. This measures the Python engine process, not the browser/whole-machine memory or a population of 100,000 independent LLM conversations.
+
+## Reproduce
 
 ```sh
 uv run python scripts/benchmark.py --sizes 1000,10000,100000 --days 30 --repetitions 10
 ```
 
-Hardware: AMD Ryzen 7 7435HS, 16 logical CPUs, 63.7 GiB RAM; CPython 3.11.15, Windows build 26300.
+Every measurement uses a unique empty directory. The [raw evidence](benchmarks-numeric9.json) records cold mode, zero preexisting results and 120 actually committed replicas per population. A repeated invocation cannot silently substitute cache reloads for computed agent-days.
 
-First current-kernel result: 1,000 people, 3.6 million agent-days, 120 committed replicas, **72.843 seconds**, **65.54 MiB peak process RSS**, zero external calls. Larger current-kernel runs are still in progress at this document stage.
+Wall time includes checkpoint/cache work; peak RSS is sampled for this process. Other development services may be active, so these are observed local results, not a guarantee for another machine. The tested workload uses the fictional game preset's placements, not every possible 15-channel custom plan. Historical development kernels are not substituted for this release's numbers.
 
-Earlier development kernels were measured separately. Their numbers are not substituted for the current release's final qualification. Numerical population size does not demonstrate empirical market representativeness or prediction quality.
+Population size and repeated seeds do not establish empirical market representativeness, proprietary-platform fidelity or forecast accuracy. See [methodology](METHODOLOGY.md).

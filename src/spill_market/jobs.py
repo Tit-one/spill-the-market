@@ -31,7 +31,7 @@ def reconcile_workers(store: Store, *, include_unstarted=False):
         if run.get("worker_pid") is None and not include_unstarted:
             continue
         if not worker_is_alive(run):
-            store.update_run(run["id"], status="interrupted", error="Worker process is no longer present; checkpoints retained.")
+            store.mark_interrupted_if_owned(run)
 
 
 def spawn_worker(store: Store, run_id: str):

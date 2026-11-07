@@ -16,7 +16,7 @@ L'application s'ouvre sur **http://127.0.0.1:8765**. Le bouton EN/FR change la l
 
 ## Une étude complète
 
-1. **Brief :** décrire le produit et sa catégorie, son prix, les moyens de l'audience, la tranche d'âge, la population, les jours et le budget publicitaire virtuel.
+1. **Brief :** décrire le produit et sa catégorie, son prix, la tranche d'âge, la population, les jours et le budget publicitaire virtuel. Les budgets d'achat individuels sont des hypothèses synthétiques du modèle.
 2. **Préparer :** générer la recherche de démonstration ou analyser des documents importés, puis consulter les profils et leurs sources.
 3. **Sources :** choisir documents, pages/RSS ou recherche connectée. Les propositions d'âge montrent leur statut et doivent être appliquées explicitement au brief avant une nouvelle préparation.
 4. **Plans média :** éditer les trois prix/stratégies, les canaux, créations, formats, poids budgétaires, horaires et répétitions. Verrouiller les lignes à conserver.

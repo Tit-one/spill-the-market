@@ -41,3 +41,4 @@ jobs:
           if [ -f .wheel-test/Scripts/python.exe ]; then PY=.wheel-test/Scripts/python.exe; else PY=.wheel-test/bin/python; fi
           "$PY" -m pip install dist/*.whl
           "$PY" -c "from spill_market.api import create_app; from pathlib import Path; import spill_market; assert (Path(spill_market.__file__).parent / 'web/index.html').is_file()"
+          "$PY" scripts/installed_smoke.py

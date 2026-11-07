@@ -30,7 +30,7 @@ spill-market serve --open
 ## From evidence to an experiment
 
 1. **Research.** Collect public pages/RSS, import documents, or use configured Tavily search and optional Firecrawl extraction. Findings retain their source IDs, dates, collection gaps and evidence status. Optional structured AI extraction uses a bounded real-services ledger.
-2. **Audience.** Choose an inclusive adult age range, means, population and representative count. Inspect fictional profiles and their source-linked beliefs. Age suggestions require confirmation; weak age-related behavior priors are editable assumptions, including a neutral setting.
+2. **Audience.** Choose an inclusive adult age range, population and representative count. Inspect fictional profiles and their source-linked beliefs. Individual purchasing budgets are synthetic model assumptions. Age suggestions require confirmation; weak age-related behavior priors are editable assumptions, including a neutral setting.
 3. **Media plans.** Compare three editable combinations of price, channel, creative, delivery hours and frequency under the same virtual advertising envelope. Lock individual lines. Product-specific proposals cover fifteen channel families, including in-game placements.
 4. **Simulation and report.** Follow attention, watch completion, comments, sharing, trend adoption, fatigue, questions and first purchases over daily rounds. Compare against price-matched no-campaign controls, with separate exploration and validation seeds. Export JSON, CSV, standalone HTML or Markdown.
 
