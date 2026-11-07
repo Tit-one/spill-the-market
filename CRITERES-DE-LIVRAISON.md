@@ -6,7 +6,7 @@ Référence : [PLAN-A-VALIDER.md](PLAN-A-VALIDER.md).
 
 ## Première version
 
-- [x] Installation et tests Windows/Linux/macOS en CI ; application locale, interface embarquée, CLI/API partagés ; contrôle de vrai worker installé sans Node ajouté au dernier cycle CI.
+- [x] Installation et tests Windows/Linux/macOS en CI ; application locale, interface embarquée, CLI/API partagés ; vrai worker installé sans Node réussi dans les six configurations Python 3.11/3.12.
 - [x] Démonstration des quatre modules, données fictives et réseau désactivé.
 - [x] Trois modes de recherche : API, URL/RSS choisis, imports hors ligne ; sources/extraits/dates/couverture/erreurs conservés.
 - [x] Sorties JSON versionnées ; faits, déductions et hypothèses distingués ; pas de croissance historique ni de démographie inventée.
