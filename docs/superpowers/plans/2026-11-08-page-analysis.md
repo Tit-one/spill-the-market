@@ -22,7 +22,7 @@
 - [x] Capture: page_capture.py + tests; local image normalization, bounded viewport capture, visible DOM boxes, public-resource isolation, real Chromium qualification.
 - [x] Observer/persona pipeline: page_vision.py + page_analysis.py + tests; provider descriptors, image-aware bounds/accounting, stage cache, progressive prompts, blind direct controls and paired A/B findings.
 - [x] Interface: PageAnalysis.tsx + isolated types/styles/tests, existing App tab; capture/import/consent/analyze/progress/evidence/reactions/comparison/export, bilingual/mobile.
-- [ ] Qualification/release: focused regressions then full tests/build, actual capture/browser/installed worker checks, scoped independent review, current docs and downloadable package.
+- [x] Release preparation: focused regressions then full tests/build, actual capture/browser/installed worker checks, scoped independent review, current docs and downloadable package. Publication is gated on terminal CI success; the exact release run and assets are recorded in the GitHub release notes.
 
 ## Review focus
 

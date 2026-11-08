@@ -17,6 +17,6 @@ build/
 playwright-report/
 test-results/
 output/
-.wheel-test/
+.wheel-test*/
 **/.playwright-cli/
 *.tsbuildinfo
