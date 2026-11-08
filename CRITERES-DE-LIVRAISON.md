@@ -1,6 +1,6 @@
-# Critères de livraison proposés
+# Critères de livraison
 
-Date : 7 novembre 2026. Statut : plan validé dans le chat, première version implémentée et qualifiée. Les preuves et leurs limites figurent dans [VERIFICATION.md](docs/VERIFICATION.md).
+Date : 8 novembre 2026. Statut : les quatre modules initiaux et le module 5 demandé sont implémentés. Les preuves de qualification, versions et limites figurent dans [VERIFICATION.md](docs/VERIFICATION.md) et les notes de publication.
 
 Référence : [PLAN-A-VALIDER.md](PLAN-A-VALIDER.md).
 
@@ -27,18 +27,18 @@ Référence : [PLAN-A-VALIDER.md](PLAN-A-VALIDER.md).
 - [x] MiroFish existant préservé ; imports et connecteur mémoire optionnel vérifiés séparément.
 - [x] Documentation anglaise/française, exemples, méthodologie, contribution, notices et exports présents.
 
-## Module 5 ultérieur
+## Module 5 — v0.2
 
-- [ ] URL/HTML/captures ; vues mobile/ordinateur et positions de défilement.
-- [ ] Observations factuelles structurées et ancrées dans les captures, interprétations séparées.
-- [ ] Chaque persona ne voit que les informations accessibles à l'étape de son parcours.
-- [ ] Réactions liées à ses besoins, caractéristiques et publicité d'origine.
-- [ ] Compréhension, questions, confiance, rejet et intention reliés aux sections déclenchantes.
-- [ ] Lecture directe des captures par un échantillon, comparée à la description commune.
-- [ ] Comparaison de deux pages avec mêmes profils et conditions.
-- [ ] Audit visuel, intention synthétique, navigation fonctionnelle et comportements réels distingués.
+- [x] URL/HTML/captures ; vues mobile/ordinateur et positions de défilement.
+- [x] Observations factuelles structurées et ancrées dans les captures, interprétations séparées.
+- [x] Chaque persona ne voit que les informations accessibles à l'étape de son parcours ; les images longues sont découpées avant exposition.
+- [x] Réactions liées à ses besoins, caractéristiques et contexte publicitaire déclaré.
+- [x] Compréhension, questions, confiance, rejet et intention reliés aux sections déclenchantes.
+- [x] Lecture directe des captures par un échantillon, comparée à la description commune ; contrôles fictifs et appels réels distingués dans les preuves.
+- [x] Comparaison de deux pages avec mêmes profils et horizon commun ; couvertures inégales signalées.
+- [x] Audit visuel, intention synthétique, navigation fonctionnelle et comportements réels distingués.
 
 Une case exige une preuve actuelle : code, commande, test, capture ou mesure. Un nom de module ou un bouton ne prouve pas son fonctionnement.
 
 
-Les cases du module5 restent intentionnellement ouvertes : il appartient à la suite explicitement validée, pas à la première livraison.
+La navigation autonome, les clics réels et la vérification d'un paiement restent ultérieurs. Les intentions d'action du lecteur sont enregistrées dans un calendrier d'inspection fixe ; elles ne pilotent pas encore un navigateur.

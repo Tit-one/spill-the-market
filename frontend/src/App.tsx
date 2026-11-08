@@ -59,6 +59,7 @@ import type {
   Category,
 } from "./types";
 import { api, setToken } from "./api";
+import PageAnalysis from "./PageAnalysis";
 import { WorkspaceRequests } from "./workspaceRequests";
 import type { OperationTicket } from "./workspaceRequests";
 import {
@@ -79,6 +80,7 @@ type Tab =
   | "research"
   | "personas"
   | "media"
+  | "page"
   | "results"
   | "settings"
   | "roadmap";
@@ -201,6 +203,7 @@ export default function App() {
     (en: string, fr: string) => (lang === "fr" ? fr : en),
     [lang],
   );
+  const [pageBusy, setPageBusy] = useState(false);
   const initialized = useRef(false);
   const requests = useRef(new WorkspaceRequests());
   const selectedStudyId = useRef<string | null>(null);
@@ -349,12 +352,12 @@ export default function App() {
     };
   }, [run?.id, run?.status, t]);
   const editSpec = (next: StudySpec) => {
-    if (requests.current.pending) return;
+    if (requests.current.pending || pageBusy) return;
     setSpec(next);
     setDirty(!!study);
   };
   const selectExample = (id: string) => {
-    if (requests.current.pending || bootLoading) return;
+    if (requests.current.pending || bootLoading || pageBusy) return;
     const example = boot?.examples.find((value) => value.id === id);
     if (!example) return;
     requests.current.invalidate();
@@ -554,6 +557,7 @@ export default function App() {
       fr: "Plans média",
       icon: <Broadcast size={21} />,
     },
+    { id: "page", en: "The page", fr: "La page", icon: <FileText size={21} /> },
     {
       id: "results",
       en: "Results",
@@ -561,7 +565,7 @@ export default function App() {
       icon: <ChartLineUp size={21} />,
     },
   ];
-  const busyAll = !!busy || bootLoading || !boot;
+  const busyAll = !!busy || bootLoading || !boot || pageBusy;
   return (
     <Language.Provider value={lang}>
       <a className="skip-link" href="#main">
@@ -574,7 +578,7 @@ export default function App() {
             href="#"
             onClick={(e) => {
               e.preventDefault();
-              if (!requests.current.pending) setTab("brief");
+              if (!requests.current.pending && !pageBusy) setTab("brief");
             }}
             aria-label="Spill the Market"
           >
@@ -596,7 +600,7 @@ export default function App() {
               <button
                 key={item.id}
                 className={`nav-item ${tab === item.id ? "active" : ""}`}
-                disabled={!!busy || bootLoading}
+                disabled={!!busy || bootLoading || pageBusy}
                 onClick={() => setTab(item.id)}
                 aria-current={tab === item.id ? "page" : undefined}
               >
@@ -610,17 +614,16 @@ export default function App() {
             <button
               className={`nav-item ${tab === "roadmap" ? "active" : ""}`}
               aria-label={t("What’s next", "La suite")}
-              disabled={!!busy || bootLoading}
+              disabled={!!busy || bootLoading || pageBusy}
               onClick={() => setTab("roadmap")}
             >
               <Lightning size={21} />
               <span>{t("What’s next", "La suite")}</span>
-              <small>05</small>
             </button>
             <button
               className={`nav-item ${tab === "settings" ? "active" : ""}`}
               aria-label={t("Settings", "Réglages")}
-              disabled={!!busy || bootLoading}
+              disabled={!!busy || bootLoading || pageBusy}
               onClick={() => setTab("settings")}
             >
               <GearSix size={21} />
@@ -650,7 +653,7 @@ export default function App() {
               </span>
               <button
                 className="language-button"
-                disabled={!!busy || bootLoading}
+                disabled={!!busy || bootLoading || pageBusy}
                 onClick={() => setLang(lang === "en" ? "fr" : "en")}
                 aria-label={t("Switch to French", "Passer en anglais")}
               >
@@ -662,7 +665,7 @@ export default function App() {
           <main id="main" tabIndex={-1}>
             <fieldset
               className="operation-lock"
-              disabled={!!busy || bootLoading}
+              disabled={!!busy || bootLoading || pageBusy}
             >
               {error && (
                 <div className="error-banner" role="alert">
@@ -725,17 +728,25 @@ export default function App() {
                                 "Three ways to show up.",
                                 "Trois façons d’émerger.",
                               )
-                            : tab === "results"
-                              ? t("Read the experiment.", "Lisez l’expérience.")
-                              : tab === "settings"
+                            : tab === "page"
+                              ? t(
+                                  "What happens after the click?",
+                                  "Que se passe-t-il après le clic ?",
+                                )
+                              : tab === "results"
                                 ? t(
-                                    "Your local workspace.",
-                                    "Votre espace local.",
+                                    "Read the experiment.",
+                                    "Lisez l’expérience.",
                                   )
-                                : t(
-                                    "The next chapter.",
-                                    "Le prochain chapitre.",
-                                  )}
+                                : tab === "settings"
+                                  ? t(
+                                      "Your local workspace.",
+                                      "Votre espace local.",
+                                    )
+                                  : t(
+                                      "The next chapter.",
+                                      "Le prochain chapitre.",
+                                    )}
                   </h1>
                   <p className="page-description">
                     {tab === "brief"
@@ -748,22 +759,27 @@ export default function App() {
                             "Same product, three price and communication candidates. Every assumption is yours to edit.",
                             "Un produit, trois couples prix et communication. Chaque hypothèse est modifiable.",
                           )
-                        : tab === "results"
+                        : tab === "page"
                           ? t(
-                              "Virtual purchases, real arithmetic. These outcomes are conditional on your inputs.",
-                              "Des achats virtuels, de vrais calculs. Ces résultats dépendent de vos paramètres.",
+                              "Capture locally, inspect the visible evidence, then follow your personas through the page.",
+                              "Capturez localement, examinez les éléments visibles, puis suivez vos personas dans la page.",
                             )
-                          : tab === "research"
+                          : tab === "results"
                             ? t(
-                                "Separate sourced observations, interpretations, and assumptions before you simulate.",
-                                "Séparez les observations sourcées, les interprétations et les hypothèses avant de simuler.",
+                                "Virtual purchases, real arithmetic. These outcomes are conditional on your inputs.",
+                                "Des achats virtuels, de vrais calculs. Ces résultats dépendent de vos paramètres.",
                               )
-                            : tab === "personas"
+                            : tab === "research"
                               ? t(
-                                  "A bounded sample makes your numerical population understandable. Each displayed profile is synthetic.",
-                                  "Un échantillon limité rend la population numérique lisible. Chaque profil présenté est synthétique.",
+                                  "Separate sourced observations, interpretations, and assumptions before you simulate.",
+                                  "Séparez les observations sourcées, les interprétations et les hypothèses avant de simuler.",
                                 )
-                              : ""}
+                              : tab === "personas"
+                                ? t(
+                                    "A bounded sample makes your numerical population understandable. Each displayed profile is synthetic.",
+                                    "Un échantillon limité rend la population numérique lisible. Chaque profil présenté est synthétique.",
+                                  )
+                                : ""}
                   </p>
                 </div>
                 {study && (
@@ -1093,6 +1109,15 @@ export default function App() {
                     </button>
                   </Empty>
                 ))}
+              {tab === "page" && (
+                <PageAnalysis
+                  key={study?.id ?? "new"}
+                  study={study}
+                  lang={lang}
+                  onOpenBrief={() => setTab("brief")}
+                  onPendingChange={setPageBusy}
+                />
+              )}
               {tab === "results" && (
                 <>
                   {run ? (
@@ -3888,18 +3913,14 @@ function Settings({
 }
 function Roadmap() {
   const t = useCopy();
-  const [data, setData] = useState<unknown>(null),
-    [error, setError] = useState("");
-  useEffect(() => {
-    void api("/roadmap")
-      .then(setData)
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
-  }, []);
   return (
     <section className="worksheet roadmap">
       <div className="sheet-header">
         <h2>
-          {t("Module 5 · Page observation", "Module 5 · Observation de page")}
+          {t(
+            "Next: functional browsing",
+            "La suite : navigation fonctionnelle",
+          )}
         </h2>
         <span className="chip assumption">
           {t("Future work", "Prévu ultérieurement")}
@@ -3908,65 +3929,25 @@ function Roadmap() {
       <div className="padded">
         <h3>
           {t(
-            "What happens after the click?",
-            "Que se passe-t-il après le clic ?",
+            "From reading a page to using it.",
+            "De la lecture d’une page à son utilisation.",
           )}
         </h3>
         <p>
           {t(
-            "The next module will connect a landing page to the same audience: what a person understands, questions, trusts, or misses. It is not enabled in this version.",
-            "Le prochain module reliera une page de destination au même public : compréhension, questions, confiance et informations manquées. Il n’est pas activé dans cette version.",
+            "Page capture, image-grounded observation and progressive synthetic persona reactions are available in The page. A later extension will let a bounded sample navigate and test real interactive paths.",
+            "La capture, l’observation fondée sur les images et les réactions progressives des personas synthétiques sont disponibles dans La page. Une extension ultérieure permettra à un échantillon limité de naviguer et de tester des parcours interactifs.",
           )}
         </p>
-        <ol className="roadmap-steps">
-          <li>
-            <strong>{t("Observe", "Observer")}</strong>
-            <span>
-              {t(
-                "URL, HTML, or screenshots at mobile and desktop viewports. Factual observations stay separate from interpretations.",
-                "URL, HTML ou captures sur mobile et ordinateur. Les observations factuelles restent distinctes des interprétations.",
-              )}
-            </span>
-          </li>
-          <li>
-            <strong>
-              {t("Reveal progressively", "Révéler progressivement")}
-            </strong>
-            <span>
-              {t(
-                "A persona receives only what it has discovered, preserving the expectations set by its ad.",
-                "Un persona ne reçoit que ce qu’il a découvert, avec les attentes créées par sa publicité.",
-              )}
-            </span>
-          </li>
-          <li>
-            <strong>{t("Compare fairly", "Comparer équitablement")}</strong>
-            <span>
-              {t(
-                "Compare two pages with the same profiles and initial conditions; link each obstacle to its observed section.",
-                "Comparez deux pages avec les mêmes profils et conditions initiales ; reliez chaque obstacle à la section observée.",
-              )}
-            </span>
-          </li>
-        </ol>
-        <Notice>
-          {t(
-            "Screenshot analysis does not verify that a button works. Functional browsing is a separate future capability.",
-            "L’analyse de captures ne vérifie pas le fonctionnement d’un bouton. La navigation fonctionnelle est une capacité future distincte.",
-          )}
-        </Notice>
-        {error && <p className="inline-error">{error}</p>}
-        {data !== null && (
-          <details>
-            <summary>
-              {t(
-                "Read the service roadmap",
-                "Lire la feuille de route du service",
-              )}
-            </summary>
-            <pre>{plain(data)}</pre>
-          </details>
-        )}
+        <div className="notice">
+          <Info />
+          <p>
+            {t(
+              "A screenshot does not verify buttons, forms, accessibility flows, checkout, or real conversion. Autonomous functional navigation remains future work.",
+              "Une capture ne vérifie ni les boutons, ni les formulaires, ni les parcours accessibles, ni le paiement, ni les conversions réelles. La navigation fonctionnelle autonome reste ultérieure.",
+            )}
+          </p>
+        </div>
       </div>
     </section>
   );

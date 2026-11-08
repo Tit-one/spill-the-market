@@ -2,7 +2,19 @@
 
 Evidence is separated by scope. Local and simulated checks are not presented as physical-device, live-provider or real-market qualification.
 
-## Current local evidence
+## v0.2 page-module evidence
+
+The page module is qualified separately from the unchanged numeric9 engine. Fresh Windows/CPython3.11 verification: **189 Python tests passed in61.34s**, Ruff (`src tests scripts`) passed. **24 frontend tests**, TypeScript/Vite and Prettier passed. Desktop/mobile screenshots and controlled HTTP transports are distinguished from live-model/account checks below.
+
+The v0.2 wheel SHA256 is `e40b47bf1183efe415aae75c7f68c167bc5660a014068703181095e3fb1a0fff`; all34runtime files byte-match source and the isolated installation. The installed no-external-Node smoke completed actual numeric and page subprocesses:4A/Bdesktop/mobile captures,12reviews,4direct demo controls and four exports, with zero provider calls. Cross-platform CI for the release commit is a publication gate; its exact run and terminal outcome are linked in the v0.2 GitHub release notes rather than inferred from the historical v0.1 matrix.
+
+- Real local UI: A/B × desktop/mobile ×2sections produced8captures,8observations,80synthetic reviews,2paired comparisons and16direct-image demo controls. Ages52–73 remained identical to profiles in the study's50–75range. All four exports were downloaded from the UI; HTML/image imports captured without triggering inference. Mobile390px had no horizontal overflow.
+- Independent review findings were fixed and rereviewed: dedicated page-worker recognition, a nonce lease for the actual Windows interpreter child, viewport-sized crops before analysis of tall imports, common-horizon A/B comparisons, and one-person histories. Five focused independent regression checks passed after the fixes.
+- A user-authorized real GPT-6 Luna test succeeded on a fictional capture: one actual visual observation and reactions from personas aged23and60. Three successful inference calls reported a total **USD0.0009251** at the verified configured rates. The report located the visible EUR29/month price, trial button and card requirement; readers asked about trial length/features absent from the visible viewport. Persona voices preserve their configured languages.
+- The first request exposed a literal `${OPENAI_API_KEY}` reference in the MiroFish configuration adapter and was rejected with401. The loader now resolves allowlisted full-string file/process references without shell execution. That attempt's USD0.0215 liability remains conservatively reserved; all attempts shared the same immutable USD0.05 ledger. Aggregate committed liability was USD0.0224251; no automatic retry of its uncertain stage occurred.
+- The paid smoke did not repeat the blind direct-image control or A/B variants; those paths have controlled-transport, actual-capture and offline end-to-end coverage. Local-compatible model/account availability remains configuration-dependent.
+
+## Archived v0.1 evidence
 
 | Requirement | Evidence |
 |---|---|

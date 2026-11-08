@@ -67,6 +67,8 @@ def serve(
     if env_file:
         from .settings import load_env_file
         load_env_file(env_file)
+    from .settings import load_provider_profile
+    load_provider_profile(data_dir, include_env_file=env_file is None)
     if open_browser:
         browser_host = "[::1]" if host == "::1" else host
         threading.Timer(1.5, webbrowser.open, args=(f"http://{browser_host}:{port}",)).start()
@@ -243,6 +245,11 @@ def import_graphiti(
     with GraphitiReadConnector.from_env() as connector:
         result = connector.import_into(LocalMemory(store.root / "memory.sqlite"), study_id, group_id, limit)
     emit(result)
+
+
+from .page_cli import install_page_cli  # noqa: E402
+
+install_page_cli(app)
 
 
 def main():

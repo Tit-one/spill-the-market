@@ -48,6 +48,9 @@ def create_app(data_dir: str | Path | None = None, *, launch_workers=True) -> Fa
     async def lifespan(app):
         if launch_workers:
             reconcile_workers(store, include_unstarted=True)
+            from .page_jobs import reconcile_page_workers
+            from .page_store import PageAuditStore
+            reconcile_page_workers(PageAuditStore(store), include_unstarted=True)
         yield
 
     app = FastAPI(title="Spill the Market", version=__version__, lifespan=lifespan)
@@ -107,7 +110,8 @@ def create_app(data_dir: str | Path | None = None, *, launch_workers=True) -> Fa
             "version": __version__, "session_token": token, "channels": channel_catalog(),
             "examples": examples(), "provider_status": provider_status(),
             "capabilities": ["local-memory", "offline-research", "public-url-research", "bounded-live-research",
-                             "adaptive-media", "individual-numeric-population", "cancel-resume", "report-export"],
+                             "adaptive-media", "individual-numeric-population", "cancel-resume", "report-export",
+                             "visual-page-analysis"],
         }
 
     @app.get("/api/v1/health")
@@ -209,10 +213,13 @@ def create_app(data_dir: str | Path | None = None, *, launch_workers=True) -> Fa
 
     @app.get("/api/v1/roadmap")
     def roadmap():
-        return {"module": 5, "status": "planned", "name": "Visual product-page comprehension",
+        return {"module": 5, "status": "available", "name": "Visual product-page comprehension",
                 "steps": ["Capture desktop and mobile", "Grounded multimodal observation", "Progressive persona reading",
                           "Questions and section-level friction", "Direct screenshot control sample", "Paired page comparison"],
-                "not_in_v01": ["Live browser navigation", "Real advertising", "Real purchases"]}
+                "future": ["Autonomous interactive browser navigation", "Real advertising", "Real purchases"]}
+
+    from .page_api import install_page_routes
+    install_page_routes(app, store, launch_workers=launch_workers)
 
     web = Path(__file__).parent / "web"
     if (web / "index.html").is_file():

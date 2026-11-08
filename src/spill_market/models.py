@@ -194,10 +194,4 @@ class StartRunRequest(Contract):
     plans: list[MediaPlan] | None = None
 
 
-class PageAuditSpec(Contract):
-    """Future module contract; no enabled visual audit is claimed in v0.1."""
-    url: str | None = None
-    html: str | None = None
-    screenshot_paths: list[str] = Field(default_factory=list)
-    viewports: list[str] = Field(default_factory=lambda: ["desktop", "mobile"])
-    observation_only: bool = True
+from .page_models import PageAuditSpec as PageAuditSpec  # noqa: E402

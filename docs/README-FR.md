@@ -46,6 +46,13 @@ La comparaison principale porte sur le **CA total**, avec un budget média commu
 
 [Définitions détaillées](METHODOLOGY.md) · [Mesures de performance](BENCHMARKS.md) · [Preuves de vérification](VERIFICATION.md).
 
-## Suite prévue : lire une page produit
+## Lire une page produit
 
-Le module 5 analysera des captures ordinateur/mobile, fera décrire factuellement la page par une IA visuelle, puis recueillera les réactions progressives des personas : compréhension, questions, confiance, rejet et intention. Les blocages seront reliés aux sections. La navigation effective dans un navigateur sera une évolution supplémentaire. [Plan du module](PAGE-ANALYSIS.md).
+L'onglet **La page** capture une URL publique sur ordinateur/mobile, rend du HTML hors ligne ou importe vos captures. Installer Chromium une fois pour les captures automatiques : `uv run python -m playwright install chromium` ; ajouter `--with-deps` si nécessaire sous Linux.
+
+1. Capturer la page A, et éventuellement B. Vérifier les images locales et la couverture des sections.
+2. Choisir le modèle visuel configuré, le nombre borné de personas et le contrôle par lecture directe des images. Pour un fournisseur distant, une autorisation précise est requise et le budget API réel de l'étude doit être positif.
+3. Lancer l'analyse : description des régions visibles, lecture progressive des personas, compréhension/questions/confiance/rejet/intention et comparaison appariée. Les captures restent locales tant que l'analyse distante n'est pas autorisée.
+4. Exporter les preuves et réactions. La démonstration fictive ne lit pas une vraie page et ne fait aucun appel d'IA.
+
+Les captures automatiques désactivent les scripts : une page dynamique peut être incomplète. Importer des captures prises dans son navigateur pour conserver son rendu. Le HTML importé n'exécute ni scripts ni requêtes réseau. La navigation autonome et le fonctionnement réel du paiement restent ultérieurs. [Configuration et méthode](PAGE-ANALYSIS.md).

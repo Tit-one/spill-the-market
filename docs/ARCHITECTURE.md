@@ -16,6 +16,16 @@ flowchart TD
     Numeric --> Checkpoints[Committed-day checkpoints + per-replica results]
     Numeric --> Report[Reconciled financial comparison + exports]
     Bridge[Optional read-only Graphiti / Neo4j bridge] --> Memory
+    API --> PageJobs[Page audit snapshots + attempt leases]
+    PageJobs --> Capture[Isolated static Chromium / imported image crops]
+    Capture --> LocalAssets[Local viewport JPEGs + visible DOM]
+    LocalAssets --> Observer[Explicit visual observer]
+    Observer --> Readers[Progressive isolated persona readers]
+    LocalAssets --> Controls[Blind direct-image controls]
+    Controls --> PageReport[Grounded page report + paired A/B]
+    Readers --> PageReport
+    Observer --> Ledger
+    Readers --> Ledger
 ```
 
 ## Boundaries
@@ -49,6 +59,10 @@ This is not full Graphiti SDK integration, cloud Zep, or the Graphiti extraction
 
 Vite writes precompiled assets under `src/spill_market/web`. The Python wheel includes them and FastAPI serves them. Node is a development/build dependency. Python 3.11 and 3.12 are the initial support matrix. CI builds and installs the wheel on Windows, Linux and macOS; actual results are recorded separately from local verification.
 
-## Future visual module
+## Visual module
 
-`PageAuditSpec` reserves a contract for the approved page-analysis extension. It has no enabled v0.1 audit endpoint. [Observation, persona exposure and vision-control contracts](PAGE-ANALYSIS.md).
+`page_models.py` defines the v0.2 contracts. `page_store.py`, `page_jobs.py` and `page_worker.py` keep capture and inference in separate explicitly requested phases. Attempt nonces survive Windows launcher/child PID differences and prevent stale workers from claiming a resumed job. Cancellation retains committed captures and analysis stages.
+
+`page_capture.py` isolates public-resource retrieval by validated IP and produces viewport JPEGs; scripts are disabled. Imported HTML is offline and tall images are cropped before exposure. `page_vision.py` provides explicit remote/local model configuration, image-aware accounting and a no-replay stage journal. `page_analysis.py` grounds observations and gives each persona only its own history and current evidence. Paired comparisons disclose their common observation horizon and coverage differences.
+
+The same study ledger bounds real charges. Page findings remain descriptive synthetic hypotheses and do not automatically alter the numerical sales engine. [Setup, contracts and limitations](PAGE-ANALYSIS.md).

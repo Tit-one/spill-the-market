@@ -112,6 +112,16 @@ const nav = (label: string) =>
   screen.getByRole("button", { name: new RegExp(`^${label}`) });
 
 describe("notebook lifecycle regressions", () => {
+  it("renders the French page-analysis heading with intact accents", async () => {
+    await openA();
+    fireEvent.click(screen.getByRole("button", { name: "Switch to French" }));
+    fireEvent.click(screen.getByRole("button", { name: /^La page/ }));
+    expect(
+      screen.getByRole("heading", {
+        name: "Que se passe-t-il après le clic ?",
+      }),
+    ).toBeTruthy();
+  });
   it("holds example switching and draft edits while preparation is pending", async () => {
     const pending = deferred<Study>();
     const base = handler;

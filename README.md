@@ -18,12 +18,14 @@ uv run spill-market serve --open
 
 Open **http://127.0.0.1:8765**. Choose the fictional game or creative-software example, prepare the brief, edit the media plans, and run. Both demos work without an API key. On Windows, `Lancer Spill the Market.cmd` starts the same application.
 
+For automatic desktop/mobile page captures, install Chromium once: `uv run python -m playwright install chromium` (Linux may need `--with-deps`). Importing screenshots works without a browser installation.
+
 An installed wheel includes the interface too:
 
 ```sh
 python -m venv .venv
 # Activate the environment, then install a wheel from GitHub Releases:
-python -m pip install /path/to/spill_the_market-0.1.0-py3-none-any.whl
+python -m pip install /path/to/spill_the_market-0.2.0-py3-none-any.whl
 spill-market serve --open
 ```
 
@@ -113,9 +115,13 @@ The primary comparison maximizes virtual total revenue under a common media enve
 
 The first release models adults and a first purchase of one product. It does not buy ads, contact creators, process payments, model taxes/refunds or operate a real checkout.
 
-## Next: visual product-page analysis
+## Visual product-page analysis
 
-Planned module 5 will capture desktop/mobile pages, create a grounded multimodal observation, reveal it progressively to personas, and locate questions, rejection and friction by section. A direct-image control sample will check what the shared description loses. Browser navigation is a further extension. [Detailed contract](docs/PAGE-ANALYSIS.md).
+The **Page** tab captures a public URL, renders imported HTML offline, or accepts screenshots. Review the local captures before choosing a configured visual model and explicitly allowing remote transmission. The fictional page demo runs without a model or billing; it cannot stand in for visual AI on a real page.
+
+An observer describes visible regions, text, prices and controls with screenshot references and uncertainty. Age-bounded study personas then receive one section at a time and report understanding, questions, trust, friction and conditional intention. A small blind direct-image control checks information lost by the shared observer. Optional A/B variants use the same sampled personas and initial conditions. Reports disclose sample/age coverage and export JSON, CSV, HTML and Markdown.
+
+Automatic captures are **static**: scripts are disabled and public assets are fetched through bounded, IP-pinned requests. Dynamic content may be absent; import browser screenshots when it matters. Imported HTML has no script or network access. Autonomous interaction and checkout testing remain future work. [Setup, contracts and limitations](docs/PAGE-ANALYSIS.md).
 
 ## Develop
 

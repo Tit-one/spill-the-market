@@ -62,9 +62,56 @@ def main():
                     process.wait(timeout=10)
             except psutil.NoSuchProcess:
                 pass
+
+            # The page pipeline must also work from the wheel, with the bundled
+            # Playwright driver and no separate developer Node installation.
+            providers = client.get("/api/v1/page-audit/providers").json()
+            assert providers["capture"]["available"], providers["capture"]
+            capture = client.post(f"/api/v1/studies/{study['id']}/page-audits", headers=headers, json={
+                "variants": [{"id": "A", "source": "demo"}, {"id": "B", "source": "demo"}],
+                "viewports": ["desktop", "mobile"], "max_sections": 1,
+                "persona_count": 2, "direct_vision_count": 1,
+            })
+            assert capture.status_code == 202, capture.text
+            audit_id = capture.json()["id"]
+
+            def wait_audit(expected):
+                deadline = time.monotonic() + 90
+                while True:
+                    value = client.get(f"/api/v1/page-audits/{audit_id}").json()
+                    if value["status"] == expected:
+                        return value
+                    assert value["status"] not in {"failed", "interrupted", "cancelled"}, value
+                    assert time.monotonic() < deadline, "Installed page worker did not finish"
+                    time.sleep(.1)
+
+            captured = wait_audit("captured")
+            assert len(captured["snapshots"]) == 4
+            for snapshot in captured["snapshots"]:
+                assert client.get(snapshot["image_url"]).status_code == 200
+            analyzed = client.post(f"/api/v1/page-audits/{audit_id}/analyze", headers=headers,
+                                   json={"provider_id": "demo"})
+            assert analyzed.status_code == 202, analyzed.text
+            finished = wait_audit("completed")
+            page_report = finished["report"]
+            assert len(page_report["observations"]) == 4 and len(page_report["reviews"]) == 12
+            assert len(page_report["comparisons"]) == 2 and len(page_report["direct_vision_controls"]) == 4
+            assert finished["cost"]["calls"] == 0
+            for format in ("json", "csv", "html", "md"):
+                assert client.get(f"/api/v1/page-audits/{audit_id}/export?format={format}").status_code == 200
+            from spill_market.page_store import PageAuditStore
+            internal_page = PageAuditStore(Store(temporary)).get(audit_id, internal=True)
+            try:
+                process = psutil.Process(internal_page["worker_pid"])
+                if abs(process.create_time() - internal_page["worker_created"]) < .01:
+                    process.wait(timeout=10)
+            except psutil.NoSuchProcess:
+                pass
             print(json.dumps({"installed_package": str(package), "node_on_path": False,
                               "real_worker_status": run["status"], "population": 60,
-                              "scenarios": 6, "provider_calls": 0, "exports": ["json", "csv", "html", "md"]}))
+                              "scenarios": 6, "provider_calls": 0, "exports": ["json", "csv", "html", "md"],
+                              "page_snapshots": 4, "page_reviews": 12, "page_controls": 4,
+                              "page_worker_status": finished["status"]}))
 
 
 if __name__ == "__main__":
