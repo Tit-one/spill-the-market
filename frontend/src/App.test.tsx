@@ -281,6 +281,60 @@ describe("notebook lifecycle regressions", () => {
       vi.mocked(api).mock.calls.some(([path]) => path === "/studies/launch"),
     ).toBe(false);
   });
+  it("preserves explicit imported research when a saved demo-mode study switches to market discovery", async () => {
+    const imported = study("imported-study", "My saved product");
+    imported.spec.research = {
+      ...imported.spec.research,
+      mode: "demo",
+      topic: "User supplied accessibility research",
+      documents: [
+        {
+          name: "Customer interviews",
+          text: "Customers described migration effort and accessibility requirements.",
+        },
+      ],
+      urls: ["https://example.org/user-supplied-evidence"],
+    };
+    let submitted: StudySpec | undefined;
+    const base = handler;
+    handler = async (path, method, body) => {
+      if (path === "/studies" && method === "GET")
+        return { studies: [imported] };
+      if (path === "/studies/imported-study") return structuredClone(imported);
+      if (path === "/studies/launch" && method === "POST") {
+        submitted = (body as { spec: StudySpec }).spec;
+        return {
+          study: {
+            ...imported,
+            id: queued.study_id,
+            spec: submitted,
+            runs: [queued],
+          },
+          run: queued,
+        };
+      }
+      return base(path, method, body);
+    };
+    render(<App />);
+    await screen.findByRole("combobox", { name: "Saved experiments" });
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "Saved experiments" }),
+      { target: { value: imported.id } },
+    );
+    await screen.findByRole("textbox", { name: "Strategy name" });
+    fireEvent.click(nav("The brief"));
+    fireEvent.click(screen.getByRole("radio", { name: /Find my market/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Explore my market" }));
+    await screen.findByText(/Queued direct launch/);
+    expect(submitted?.research.mode).toBe("offline");
+    expect(submitted?.research.topic).toBe(imported.spec.research.topic);
+    expect(submitted?.research.documents).toEqual(
+      imported.spec.research.documents,
+    );
+    expect(submitted?.research.urls).toEqual(imported.spec.research.urls);
+    expect(submitted?.research.use_llm).toBe(false);
+    expect(submitted?.research.use_firecrawl).toBe(false);
+  });
   it("starts with a neutral product and loads a fictional example only after choosing it", async () => {
     render(<App />);
     await screen.findByRole("combobox", { name: "Saved experiments" });

@@ -1503,9 +1503,6 @@ function BriefForm({
         use_llm: false,
         use_firecrawl: false,
         mode: s.research.mode === "demo" ? "offline" : s.research.mode,
-        ...(s.research.mode === "demo"
-          ? { topic: "", documents: [], urls: [] }
-          : {}),
       },
     });
   };
