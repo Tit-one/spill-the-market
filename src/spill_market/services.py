@@ -5,6 +5,19 @@ from .models import ProductSpec, ResearchRequest, StudySpec, TrendReport
 from .storage import Store
 
 
+def study_with_credibility(study: dict) -> dict:
+    from .credibility import assess_product_credibility
+    return {**study, "product_credibility": assess_product_credibility(study["spec"]["product"])}
+
+
+def screen_product_claims(report: TrendReport, product: ProductSpec):
+    from .credibility import assess_product_credibility
+    assessment = assess_product_credibility(product, report)
+    report.coverage["product_credibility"] = assessment
+    if assessment["status"] != "ordinary":
+        report.limitations.append("Product promises are unsubstantiated; skepticism coefficients are declared hypotheses, not scientific verification or measured fraud rates.")
+
+
 def age_recommendation(product: ProductSpec, report: TrendReport) -> dict:
     """Propose, never claim an optimal age or infer demographics from slang."""
     for source in report.sources:
@@ -40,6 +53,7 @@ async def prepare_study(store: Store, spec: StudySpec) -> dict:
         mode="offline", topic=spec.research.topic, language=spec.research.language, region=spec.research.region,
     )
     report = await run_research(request, spec.product)
+    screen_product_claims(report, spec.product)
     suggestion = age_recommendation(spec.product, report)
     report.coverage["age_recommendation"] = suggestion
     if spec.audience.auto_age:
@@ -53,7 +67,7 @@ async def prepare_study(store: Store, spec: StudySpec) -> dict:
     memory = LocalMemory(store.root / "memory.sqlite")
     memory.ingest_report(study["id"], report)
     persist_beliefs(memory, study["id"], personas)
-    return study
+    return study_with_credibility(study)
 
 
 async def research_study(store: Store, study_id: str, payload: ResearchRequest | None = None) -> dict:
@@ -66,12 +80,18 @@ async def research_study(store: Store, study_id: str, payload: ResearchRequest |
     study = store.get_study(study_id)
     spec = StudySpec.model_validate(study["spec"])
     request = payload or spec.research
+    if spec.objective == "market_discovery" and request.mode == "live":
+        suffix = (" alternatives concurrents prix avis migration" if spec.locale == "fr"
+                  else " alternatives competitors pricing reviews migration")
+        if not request.topic.endswith(suffix):
+            request = request.model_copy(update={"topic": (request.topic or spec.product.name)[:330] + suffix})
     paid = request.mode == "live" or (request.mode == "urls" and request.use_firecrawl)
     if paid and spec.api_budget_usd <= 0:
         raise ValueError("Set a positive real API budget when creating the study before enabling paid services")
     (store.root / "budgets").mkdir(exist_ok=True)
     ledger = BudgetLedger(store.root / "budgets" / f"{study_id}.sqlite", spec.api_budget_usd, spec.api_max_calls)
     report = await run_research(request, spec.product, ledger=ledger)
+    screen_product_claims(report, spec.product)
     suggestion = age_recommendation(spec.product, report)
     report.coverage["age_recommendation"] = suggestion
     if spec.audience.auto_age:
@@ -96,3 +116,32 @@ async def research_study(store: Store, study_id: str, payload: ResearchRequest |
     memory.ingest_report(study_id, report)
     persist_beliefs(memory, study_id, personas)
     return {"report": report.model_dump(), "cost": ledger.summary(), "plans": [p.model_dump() for p in proposed]}
+
+
+async def guided_launch(store: Store, spec: StudySpec, *, launch_workers: bool) -> dict:
+    """Explicit one-click free/offline launch; paid research keeps its own action."""
+    from .jobs import spawn_worker
+    if spec.research.mode == "live" or spec.research.use_llm or spec.research.use_firecrawl or spec.use_representative_llm:
+        raise ValueError("Guided launch uses free/offline research. Start paid research or representative inference through its explicit action.")
+    study = await prepare_study(store, spec)
+    warning = None
+    supplied = ([spec.market.product_url] if spec.market.product_url else []) + spec.market.competitor_urls
+    urls = list(dict.fromkeys(supplied + spec.research.urls))
+    if urls:
+        # The click authorizes fetching supplied pages, never discovery or inference.
+        request = spec.research.model_copy(update={"mode": "urls", "urls": urls[:20],
+            "region": spec.audience.region})
+        try:
+            result = await research_study(store, study["id"], request)
+            if result["report"]["coverage"].get("failures") or len(urls) > min(20, request.max_sources):
+                warning = ("Certaines sources n'ont pas pu être lues ou dépassent la limite de collecte. L'étude est conservée ; les conclusions restent conditionnelles."
+                           if spec.locale == "fr" else "Some sources could not be read or exceeded the collection limit. The study is retained; conclusions remain conditional.")
+        except (ValueError, OSError) as exc:
+            # Preserve the editable saved study if acquisition is unavailable.
+            warning = (f"Sources indisponibles ({type(exc).__name__}). Simulation lancée sur les données conservées."
+                       if spec.locale == "fr" else f"Sources unavailable ({type(exc).__name__}). Simulation uses the retained inputs.")
+    study = study_with_credibility(store.get_study(study["id"]))
+    run = store.create_run(study["id"], study["spec"], study["plans"])
+    if launch_workers:
+        spawn_worker(store, run["id"])
+    return {"study": study, "run": store.get_run(run["id"], include_report=False), "research_error": warning}

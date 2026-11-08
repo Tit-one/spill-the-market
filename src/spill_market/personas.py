@@ -82,6 +82,8 @@ def initialize_population(product: ProductSpec, audience: AudienceSpec, seed: in
         states["channel_affinity"] = soft_shift(states["channel_affinity"],
             weight * centered_age[:, None] * np.array(AGE_CHANNEL_PRIORS))
         states["social_sensitivity"] = soft_shift(states["social_sensitivity"], -.3 * weight * centered_age)
+    # Derive this trait without consuming random draws or imposing an age rule.
+    states["skepticism"] = np.clip(.7 * (1 - states["trust"]) + .3 * states["price_sensitivity"], 0, 1)
     return states
 
 
@@ -112,6 +114,7 @@ def generate_personas(product: ProductSpec, audience: AudienceSpec, research: Tr
             profession=professions[int(states["profession_index"][i])],
             budget_cents=int(states["budget_cents"][i]), need_fit=float(states["need_fit"][i]),
             trust=float(states["trust"][i]), price_sensitivity=float(states["price_sensitivity"][i]),
+            skepticism=float(states["skepticism"][i]),
             social_sensitivity=float(states["social_sensitivity"][i]),
             fatigue_tolerance=float(states["fatigue_tolerance"][i]),
             channels={c: float(states["channel_affinity"][i, j]) for j, c in enumerate(CHANNELS)},

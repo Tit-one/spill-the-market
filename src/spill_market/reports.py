@@ -16,6 +16,53 @@ def mean_interval(values: list[float]) -> list[float] | None:
     return [mean - half, mean + half]
 
 
+def _optional_interval(values):
+    available = [value for value in values if value is not None]
+    return interval(available) if available else None
+
+
+def _summarize_age_segments(replicas):
+    summaries = []
+    for index, first in enumerate(replicas[0]["age_segments"]):
+        rows = [replica["age_segments"][index] for replica in replicas]
+        summary = {key: first[key] for key in ("age_min", "age_max", "label")}
+        for key in ("population", "units", "organic_units", "revenue_cents"):
+            values = [row[key] for row in rows]
+            summary[key] = float(np.mean(values))
+            summary["revenue_interval_cents" if key == "revenue_cents" else key + "_interval"] = interval(values)
+        summary["conversion_rate"] = summary["units"] / summary["population"] if summary["population"] else None
+        summary["conversion_rate_interval"] = _optional_interval([row["conversion_rate"] for row in rows])
+        population = sum(row["population"] for row in rows)
+        summary["mean_intention"] = (sum(row["mean_intention"] * row["population"] for row in rows if row["population"])
+                                     / population if population else None)
+        summary["mean_intention_interval"] = _optional_interval([row["mean_intention"] for row in rows])
+        channels = []
+        for channel_index, first_channel in enumerate(first["channels"]):
+            channel_rows = [row["channels"][channel_index] for row in rows]
+            channel = {"channel": first_channel["channel"]}
+            for key in ("unique_reach", "units"):
+                values = [row[key] for row in channel_rows]
+                channel[key] = float(np.mean(values))
+                channel[key + "_interval"] = interval(values)
+            channel["conversion_rate"] = channel["units"] / channel["unique_reach"] if channel["unique_reach"] else None
+            channel["conversion_rate_interval"] = _optional_interval([row["conversion_rate"] for row in channel_rows])
+            channels.append(channel)
+        summary["channels"] = channels
+        summaries.append(summary)
+    return summaries
+
+
+def _summarize_market_switching(replicas):
+    rows = [replica["market_switching"] for replica in replicas]
+    summary = {key: rows[0][key] for key in ("enabled", "status", "incumbent_share", "switching_friction", "assumptions")}
+    for key in ("population", "buyers", "incumbent_users", "non_incumbent_users", "switchers",
+                "new_to_category_buyers", "retained_incumbents", "new_to_category_nonbuyers", "mean_switching_acceptance"):
+        values = [row[key] for row in rows]
+        summary[key] = float(np.mean(values)) if values[0] is not None else None
+        summary[key + "_interval"] = _optional_interval(values)
+    return summary
+
+
 def summarize_scenario(plan, replicas: list[dict], *, is_baseline: bool = False) -> dict:
     revenue = [r["revenue_cents"] for r in replicas]
     daily = []
@@ -29,11 +76,14 @@ def summarize_scenario(plan, replicas: list[dict], *, is_baseline: bool = False)
                               "exposed_purchase_units", "view_attributed_units", "click_attributed_units",
                               "paid_clicks", "views", "completions", "skips", "comments", "shares",
                               "trend_adoptions", "creator_posts", "earned_impressions",
-                              "nonmember_deliveries", "cross_community_deliveries"]}
+                              "nonmember_deliveries", "cross_community_deliveries", "skeptical_comments", "positive_comments"]}
         for key in ("pending_liability_cents", "reserved_liability_cents", "released_liability_cents", "settled_liability_cents"):
             values[key] = float(np.mean([r["channels"][i][key] for r in replicas]))
         values.update(channel=row["channel"],
                       attributed_conversion_rate=values["units"] / values["unique_reach"] if values["unique_reach"] else None,
+                      conversion_rate_interval=_optional_interval([
+                          r["channels"][i]["units"] / r["channels"][i]["unique_reach"]
+                          if r["channels"][i]["unique_reach"] else None for r in replicas]),
                       exposed_purchase_rate=values["exposed_purchase_units"] / values["unique_reach"] if values["unique_reach"] else None,
                       cac_cents=values["spend_cents"] / values["units"] if values["units"] else None)
         channel_rows.append(values)
@@ -46,6 +96,13 @@ def summarize_scenario(plan, replicas: list[dict], *, is_baseline: bool = False)
         "price_cents": plan.price_cents, "mean_revenue_cents": float(np.mean(revenue)),
         "median_revenue_cents": float(np.median(revenue)), "revenue_interval_cents": interval(revenue),
         "mean_units": mean_units, "mean_unique_buyers": mean_units, "mean_spend_cents": mean_spend,
+        "product_credibility": replicas[0]["product_credibility"],
+        "mean_scam_suspicion": float(np.mean([r["mean_scam_suspicion"] for r in replicas])),
+        "mean_credibility_acceptance": float(np.mean([r["mean_credibility_acceptance"] for r in replicas])),
+        "skeptical_comments": float(np.mean([r["skeptical_comments"] for r in replicas])),
+        "positive_comments": float(np.mean([r["positive_comments"] for r in replicas])),
+        "age_segments": _summarize_age_segments(replicas),
+        "market_switching": _summarize_market_switching(replicas),
         "mean_cac_cents": mean_spend / mean_units if mean_units else None,
         "mean_paid_cac_cents": mean_spend / paid_units if paid_units else None,
         "mean_paid_units": paid_units,

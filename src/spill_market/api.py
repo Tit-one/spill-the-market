@@ -129,9 +129,15 @@ def create_app(data_dir: str | Path | None = None, *, launch_workers=True) -> Fa
         from .services import prepare_study
         return await prepare_study(store, payload.spec)
 
+    @app.post("/api/v1/studies/launch", status_code=202)
+    async def guided_launch(payload: CreateStudyRequest):
+        from .services import guided_launch as operation
+        return await operation(store, payload.spec, launch_workers=launch_workers)
+
     @app.get("/api/v1/studies/{study_id}")
     def get_study(study_id: str):
-        return store.get_study(study_id)
+        from .services import study_with_credibility
+        return study_with_credibility(store.get_study(study_id))
 
     @app.put("/api/v1/studies/{study_id}/plans")
     def update_plans(study_id: str, payload: StartRunRequest):

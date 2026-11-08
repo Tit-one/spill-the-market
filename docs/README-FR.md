@@ -16,12 +16,13 @@ L'application s'ouvre sur **http://127.0.0.1:8765**. Le bouton EN/FR change la l
 
 ## Une étude complète
 
-1. **Brief :** décrire le produit et sa catégorie, son prix, la tranche d'âge, la population, les jours et le budget publicitaire virtuel. Les budgets d'achat individuels sont des hypothèses synthétiques du modèle.
-2. **Préparer :** générer la recherche de démonstration ou analyser des documents importés, puis consulter les profils et leurs sources.
-3. **Sources :** choisir documents, pages/RSS ou recherche connectée. Les propositions d'âge montrent leur statut et doivent être appliquées explicitement au brief avant une nouvelle préparation.
-4. **Plans média :** éditer les trois prix/stratégies, les canaux, créations, formats, poids budgétaires, horaires et répétitions. Verrouiller les lignes à conserver.
-5. **Lancer :** suivre la progression ; annuler puis reprendre si nécessaire. Les résultats engagés et les frais API incertains restent enregistrés.
-6. **Comparer :** examiner le CA virtuel, les ventes, l'acquisition, la fatigue, les interactions sociales, les témoins sans campagne et les hypothèses. Télécharger le rapport.
+1. **Choisir l'objectif :** tester une campagne pour une cible connue, ou explorer le marché et ses tranches d'âge.
+2. **Décrire le produit :** nom, description, catégorie, prix et budget publicitaire virtuel. En campagne, préciser les âges ; l'exploration utilise une large plage adulte affichée. On peut ajouter la page du produit et des références concurrentes dans **Enrichir avec des sources**.
+3. **Lancer :** une seule action prépare les données et les trois stratégies puis démarre le calcul. Suivre la progression, annuler/reprendre si nécessaire et lire le bilan.
+
+Population, jours, répétitions, coûts, stocks et réglages techniques restent dans les options avancées. Les onglets Sources, Personas, Plans média et La page permettent d'approfondir l'étude. Les exemples fictifs se chargent volontairement.
+
+L'exploration présente taux par âge/canal, références concurrentes, freins et migrations simulées depuis une solution existante. Ces migrations sont incluses dans les achats, jamais ajoutées aux ventes. Un classement indépartageable ou un manque de sources reste signalé. [Méthode et limites](MARKET-STUDY.md).
 
 Le type de produit oriente les propositions. Pour un jeu, les autres jeux, Twitch, créateurs et vidéos courtes peuvent être explorés. Le système teste aussi les limites du martelage : attention saturée, fatigue et rejet. Ces mécanismes restent des hypothèses modifiables.
 
@@ -43,6 +44,12 @@ La mémoire locale SQLite fonctionne sans Zep. Les imports MiroFish sont traité
 Les personnes et achats sont fictifs. Une intention conditionnelle n'est pas une vente. Les intervalles décrivent la variabilité du modèle, pas la fiabilité d'une future campagne réelle. Les coefficients et prix média par défaut ne sont pas des mesures des plateformes.
 
 La comparaison principale porte sur le **CA total**, avec un budget média commun. Le résultat après coûts reste visible séparément. Un gagnant n'est retenu que si l'écart de validation dépasse le seuil pratique et sa variabilité appariée ; sinon, le rapport indique que les plans sont indépartageables dans l'expérience.
+
+L'accueil commence par un produit vide ; les exemples se chargent volontairement. Les résultats affichent d'abord une conclusion et quatre chiffres d'un scénario nommé : ventes, CA virtuel, dépenses et CAC. Zéro acheteur rend le CAC non calculable. Les trois plans se comparent ensuite ; les détails restent dépliables.
+
+Les promesses extraordinaires non étayées font désormais l'objet d'un triage lexical explicite. Le scepticisme varie entre personnes du même âge, freine l'intention et l'achat et ne disparaît pas sous les rappels. Les commentaires méfiants ne valent pas des recommandations positives. Les coefficients restent des hypothèses ; l'application ne certifie pas l'efficacité d'un produit et ne produit pas de verdict factuel d'arnaque.
+
+En cas de verrouillage Windows temporaire, les écritures atomiques réessaient brièvement. Un échec permanent conserve le dernier état engagé ; **Reprendre le calcul** permet de continuer après résolution. Les rapports de l'ancien modèle restent accessibles avec leur statut non évalué.
 
 [Définitions détaillées](METHODOLOGY.md) · [Mesures de performance](BENCHMARKS.md) · [Preuves de vérification](VERIFICATION.md).
 

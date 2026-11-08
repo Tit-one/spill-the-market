@@ -35,6 +35,7 @@ import { WorkspaceRequests } from "./workspaceRequests";
 import type { OperationTicket } from "./workspaceRequests";
 import { money, percent, plain } from "./utils";
 import "./PageAnalysis.css";
+import PageOverview from "./PageOverview";
 export interface PageAnalysisProps {
   study: Study | null;
   lang: Lang;
@@ -483,395 +484,422 @@ export default function PageAnalysis({
           </div>
         </div>
       )}
+      {audit?.report && (
+        <PageOverview
+          report={audit.report}
+          lang={lang}
+          onInspect={(id) => {
+            if (id && audit.snapshots.some((s) => s.id === id))
+              setSelectedSnapshot(id);
+            document
+              .querySelector(".page-evidence")
+              ?.scrollIntoView?.({ block: "start" });
+          }}
+        />
+      )}
       <fieldset disabled={pending}>
         <legend className="sr-only">
           {t("Page capture and analysis", "Capture et analyse de page")}
         </legend>
-        <section className="worksheet page-capture-form">
-          <div className="sheet-header">
-            <h2>{t("A page to look at", "Une page à observer")}</h2>
-            <span className="chip">
-              {t("New capture draft", "Nouvelle capture")}
-            </span>
-          </div>
-          <div className="padded">
-            <p className="page-local-note">
-              <CheckCircle size={19} />
-              {t(
-                "Capturing and importing keep screenshots local. Analysis is a separate, explicit action.",
-                "La capture et l’import conservent les images localement. L’analyse est une action distincte et explicite.",
-              )}
-            </p>
-            <div
-              className={`page-variants ${spec.variants.length === 2 ? "paired" : ""}`}
-            >
-              {spec.variants.map((v) => (
-                <section key={v.id} className="page-variant">
-                  <div className="page-variant-heading">
-                    <strong>
-                      {t("Variant", "Variante")} {v.id}
-                    </strong>
-                    {v.id === "B" && (
-                      <button
-                        className="icon-button danger"
-                        aria-label={t(
-                          "Remove variant B",
-                          "Retirer la variante B",
+        <details className="page-capture-editor" open={!audit?.report}>
+          <summary>
+            {t(
+              "Create or configure a page capture",
+              "Créer ou configurer une capture de page",
+            )}
+          </summary>
+          <section className="worksheet page-capture-form">
+            <div className="sheet-header">
+              <h2>{t("A page to look at", "Une page à observer")}</h2>
+              <span className="chip">
+                {t("New capture draft", "Nouvelle capture")}
+              </span>
+            </div>
+            <div className="padded">
+              <p className="page-local-note">
+                <CheckCircle size={19} />
+                {t(
+                  "Capturing and importing keep screenshots local. Analysis is a separate, explicit action.",
+                  "La capture et l’import conservent les images localement. L’analyse est une action distincte et explicite.",
+                )}
+              </p>
+              <div
+                className={`page-variants ${spec.variants.length === 2 ? "paired" : ""}`}
+              >
+                {spec.variants.map((v) => (
+                  <section key={v.id} className="page-variant">
+                    <div className="page-variant-heading">
+                      <strong>
+                        {t("Variant", "Variante")} {v.id}
+                      </strong>
+                      {v.id === "B" && (
+                        <button
+                          className="icon-button danger"
+                          aria-label={t(
+                            "Remove variant B",
+                            "Retirer la variante B",
+                          )}
+                          onClick={() =>
+                            edit({
+                              ...spec,
+                              variants: spec.variants.filter(
+                                (x) => x.id !== "B",
+                              ),
+                            })
+                          }
+                        >
+                          <Trash />
+                        </button>
+                      )}
+                    </div>
+                    <label className="field">
+                      <span>
+                        {t(
+                          `Variant ${v.id} label`,
+                          `Libellé de la variante ${v.id}`,
                         )}
-                        onClick={() =>
-                          edit({
-                            ...spec,
-                            variants: spec.variants.filter((x) => x.id !== "B"),
+                      </span>
+                      <input
+                        maxLength={150}
+                        required
+                        value={v.label}
+                        onChange={(e) =>
+                          editVariant(v.id, { label: e.target.value })
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      <span>
+                        {t(
+                          `Variant ${v.id} source`,
+                          `Source de la variante ${v.id}`,
+                        )}
+                      </span>
+                      <select
+                        value={v.source}
+                        onChange={(e) =>
+                          editVariant(v.id, {
+                            source: e.target
+                              .value as PageVariantInput["source"],
+                            url: null,
+                            html: null,
+                            screenshots: [],
                           })
                         }
                       >
-                        <Trash />
-                      </button>
+                        <option value="demo">
+                          {t("Fictional demo", "Démo fictive")}
+                        </option>
+                        <option value="url">
+                          {t("Public URL", "URL publique")}
+                        </option>
+                        <option value="html">
+                          {t("Import HTML", "Importer du HTML")}
+                        </option>
+                        <option value="screenshots">
+                          {t("Import screenshots", "Importer des captures")}
+                        </option>
+                      </select>
+                    </label>
+                    {v.source === "url" && (
+                      <>
+                        <label className="field">
+                          <span>
+                            {t(
+                              `Variant ${v.id} public URL`,
+                              `URL publique de la variante ${v.id}`,
+                            )}
+                          </span>
+                          <input
+                            type="url"
+                            maxLength={2048}
+                            placeholder="https://example.org/product"
+                            value={v.url ?? ""}
+                            onChange={(e) =>
+                              editVariant(v.id, { url: e.target.value })
+                            }
+                          />
+                        </label>
+                        <p className="page-source-warning">
+                          {t(
+                            "Static capture: JavaScript is disabled. Dynamic content may be missing. For a single-page app, import screenshots you captured yourself.",
+                            "Capture statique : JavaScript est désactivé. Des contenus dynamiques peuvent manquer. Pour une application web dynamique, importez vos propres captures.",
+                          )}
+                        </p>
+                      </>
                     )}
-                  </div>
-                  <label className="field">
-                    <span>
-                      {t(
-                        `Variant ${v.id} label`,
-                        `Libellé de la variante ${v.id}`,
-                      )}
-                    </span>
-                    <input
-                      maxLength={150}
-                      required
-                      value={v.label}
-                      onChange={(e) =>
-                        editVariant(v.id, { label: e.target.value })
-                      }
-                    />
-                  </label>
-                  <label className="field">
-                    <span>
-                      {t(
-                        `Variant ${v.id} source`,
-                        `Source de la variante ${v.id}`,
-                      )}
-                    </span>
-                    <select
-                      value={v.source}
-                      onChange={(e) =>
-                        editVariant(v.id, {
-                          source: e.target.value as PageVariantInput["source"],
-                          url: null,
-                          html: null,
-                          screenshots: [],
-                        })
-                      }
-                    >
-                      <option value="demo">
-                        {t("Fictional demo", "Démo fictive")}
-                      </option>
-                      <option value="url">
-                        {t("Public URL", "URL publique")}
-                      </option>
-                      <option value="html">
-                        {t("Import HTML", "Importer du HTML")}
-                      </option>
-                      <option value="screenshots">
-                        {t("Import screenshots", "Importer des captures")}
-                      </option>
-                    </select>
-                  </label>
-                  {v.source === "url" && (
-                    <>
-                      <label className="field">
-                        <span>
+                    {v.source === "html" && (
+                      <>
+                        <label className="field">
+                          <span>
+                            {t(
+                              `Variant ${v.id} HTML`,
+                              `HTML de la variante ${v.id}`,
+                            )}
+                          </span>
+                          <textarea
+                            rows={6}
+                            maxLength={500000}
+                            value={v.html ?? ""}
+                            onChange={(e) =>
+                              editVariant(v.id, { html: e.target.value })
+                            }
+                            placeholder="<main>…</main>"
+                          />
+                        </label>
+                        <p className="page-source-warning">
                           {t(
-                            `Variant ${v.id} public URL`,
-                            `URL publique de la variante ${v.id}`,
+                            "HTML is rendered locally with scripts and network disabled. External images and fonts may be absent.",
+                            "Le HTML est rendu localement, sans scripts ni réseau. Des images et polices externes peuvent être absentes.",
                           )}
-                        </span>
-                        <input
-                          type="url"
-                          maxLength={2048}
-                          placeholder="https://example.org/product"
-                          value={v.url ?? ""}
-                          onChange={(e) =>
-                            editVariant(v.id, { url: e.target.value })
-                          }
-                        />
-                      </label>
-                      <p className="page-source-warning">
-                        {t(
-                          "Static capture: JavaScript is disabled. Dynamic content may be missing. For a single-page app, import screenshots you captured yourself.",
-                          "Capture statique : JavaScript est désactivé. Des contenus dynamiques peuvent manquer. Pour une application web dynamique, importez vos propres captures.",
-                        )}
-                      </p>
-                    </>
-                  )}
-                  {v.source === "html" && (
-                    <>
-                      <label className="field">
-                        <span>
-                          {t(
-                            `Variant ${v.id} HTML`,
-                            `HTML de la variante ${v.id}`,
-                          )}
-                        </span>
-                        <textarea
-                          rows={6}
-                          maxLength={500000}
-                          value={v.html ?? ""}
-                          onChange={(e) =>
-                            editVariant(v.id, { html: e.target.value })
-                          }
-                          placeholder="<main>…</main>"
-                        />
-                      </label>
-                      <p className="page-source-warning">
-                        {t(
-                          "HTML is rendered locally with scripts and network disabled. External images and fonts may be absent.",
-                          "Le HTML est rendu localement, sans scripts ni réseau. Des images et polices externes peuvent être absentes.",
-                        )}
-                      </p>
-                    </>
-                  )}
-                  {v.source === "screenshots" && (
-                    <>
-                      <label className="field">
-                        <span>
-                          {t(
-                            `Variant ${v.id} screenshot files`,
-                            `Fichiers de capture de la variante ${v.id}`,
-                          )}
-                        </span>
-                        <input
-                          type="file"
-                          accept="image/png,image/jpeg,image/webp"
-                          multiple
-                          onChange={(e) => addFiles(v.id, e.target.files)}
-                        />
-                        <small>
-                          {t(
-                            "PNG/JPEG/WebP. 12 images per variant; 8 MB encoded each, 24 MB total.",
-                            "PNG/JPEG/WebP. 12 images par variante ; 8 Mo encodés par image, 24 Mo au total.",
-                          )}
-                        </small>
-                      </label>
-                      <div className="page-upload-list">
-                        {v.screenshots.map((image, i) => (
-                          <div key={`${image.name}-${i}`}>
-                            <strong>{image.name}</strong>
-                            <label>
-                              <span>{t("Viewport", "Vue")}</span>
-                              <select
-                                aria-label={`${v.id} ${image.name} ${t("viewport", "vue")}`}
-                                value={image.viewport}
-                                onChange={(e) =>
+                        </p>
+                      </>
+                    )}
+                    {v.source === "screenshots" && (
+                      <>
+                        <label className="field">
+                          <span>
+                            {t(
+                              `Variant ${v.id} screenshot files`,
+                              `Fichiers de capture de la variante ${v.id}`,
+                            )}
+                          </span>
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            multiple
+                            onChange={(e) => addFiles(v.id, e.target.files)}
+                          />
+                          <small>
+                            {t(
+                              "PNG/JPEG/WebP. 12 images per variant; 8 MB encoded each, 24 MB total.",
+                              "PNG/JPEG/WebP. 12 images par variante ; 8 Mo encodés par image, 24 Mo au total.",
+                            )}
+                          </small>
+                        </label>
+                        <div className="page-upload-list">
+                          {v.screenshots.map((image, i) => (
+                            <div key={`${image.name}-${i}`}>
+                              <strong>{image.name}</strong>
+                              <label>
+                                <span>{t("Viewport", "Vue")}</span>
+                                <select
+                                  aria-label={`${v.id} ${image.name} ${t("viewport", "vue")}`}
+                                  value={image.viewport}
+                                  onChange={(e) =>
+                                    editVariant(v.id, {
+                                      screenshots: v.screenshots.map((s, j) =>
+                                        j === i
+                                          ? {
+                                              ...s,
+                                              viewport: e.target
+                                                .value as Viewport,
+                                            }
+                                          : s,
+                                      ),
+                                    })
+                                  }
+                                >
+                                  <option value="desktop">
+                                    {t("Desktop", "Ordinateur")}
+                                  </option>
+                                  <option value="mobile">Mobile</option>
+                                </select>
+                              </label>
+                              <label>
+                                <span>
+                                  {t("Scroll offset (px)", "Défilement (px)")}
+                                </span>
+                                <input
+                                  aria-label={`${v.id} ${image.name} ${t("scroll offset", "défilement")}`}
+                                  type="number"
+                                  min={0}
+                                  max={200000}
+                                  value={image.scroll_y}
+                                  onChange={(e) =>
+                                    editVariant(v.id, {
+                                      screenshots: v.screenshots.map((s, j) =>
+                                        j === i
+                                          ? {
+                                              ...s,
+                                              scroll_y: Number(e.target.value),
+                                            }
+                                          : s,
+                                      ),
+                                    })
+                                  }
+                                />
+                              </label>
+                              <button
+                                className="icon-button danger"
+                                aria-label={t(
+                                  `Remove ${image.name}`,
+                                  `Retirer ${image.name}`,
+                                )}
+                                onClick={() =>
                                   editVariant(v.id, {
-                                    screenshots: v.screenshots.map((s, j) =>
-                                      j === i
-                                        ? {
-                                            ...s,
-                                            viewport: e.target
-                                              .value as Viewport,
-                                          }
-                                        : s,
+                                    screenshots: v.screenshots.filter(
+                                      (_, j) => j !== i,
                                     ),
                                   })
                                 }
                               >
-                                <option value="desktop">
-                                  {t("Desktop", "Ordinateur")}
-                                </option>
-                                <option value="mobile">Mobile</option>
-                              </select>
-                            </label>
-                            <label>
-                              <span>
-                                {t("Scroll offset (px)", "Défilement (px)")}
-                              </span>
-                              <input
-                                aria-label={`${v.id} ${image.name} ${t("scroll offset", "défilement")}`}
-                                type="number"
-                                min={0}
-                                max={200000}
-                                value={image.scroll_y}
-                                onChange={(e) =>
-                                  editVariant(v.id, {
-                                    screenshots: v.screenshots.map((s, j) =>
-                                      j === i
-                                        ? {
-                                            ...s,
-                                            scroll_y: Number(e.target.value),
-                                          }
-                                        : s,
-                                    ),
-                                  })
-                                }
-                              />
-                            </label>
-                            <button
-                              className="icon-button danger"
-                              aria-label={t(
-                                `Remove ${image.name}`,
-                                `Retirer ${image.name}`,
-                              )}
-                              onClick={() =>
-                                editVariant(v.id, {
-                                  screenshots: v.screenshots.filter(
-                                    (_, j) => j !== i,
-                                  ),
-                                })
-                              }
-                            >
-                              <Trash size={18} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                  {v.source === "demo" && (
-                    <p className="muted small">
-                      {t(
-                        "A visibly fictional product page. Demo reactions are illustrative, with no model call.",
-                        "Une page produit explicitement fictive. Les réactions de démonstration sont illustratives, sans appel de modèle.",
-                      )}
-                    </p>
-                  )}
-                </section>
-              ))}
-            </div>
-            {spec.variants.length === 1 && (
-              <button
-                className="button secondary compact page-add-variant"
-                onClick={() =>
-                  edit({ ...spec, variants: [...spec.variants, variant("B")] })
-                }
-              >
-                <Plus />
-                {t("Add paired variant B", "Ajouter la variante B appariée")}
-              </button>
-            )}
-            <div className="page-capture-options">
-              <div>
-                <span className="page-field-title">
-                  {t("Capture viewports", "Vues à capturer")}
-                </span>
-                <div className="button-row">
-                  {(["desktop", "mobile"] as const).map((v) => (
-                    <label className="checkbox" key={v}>
-                      <input
-                        type="checkbox"
-                        checked={spec.viewports.includes(v)}
-                        onChange={(e) =>
-                          edit({
-                            ...spec,
-                            viewports: e.target.checked
-                              ? [...spec.viewports, v]
-                              : spec.viewports.filter((x) => x !== v),
-                          })
-                        }
-                      />
-                      {v === "desktop" ? (
-                        <Monitor size={17} />
-                      ) : (
-                        <DeviceMobile size={17} />
-                      )}{" "}
-                      {v === "desktop"
-                        ? t("Desktop", "Ordinateur")
-                        : t("Mobile", "Mobile")}
-                    </label>
-                  ))}
-                </div>
+                                <Trash size={18} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    {v.source === "demo" && (
+                      <p className="muted small">
+                        {t(
+                          "A visibly fictional product page. Demo reactions are illustrative, with no model call.",
+                          "Une page produit explicitement fictive. Les réactions de démonstration sont illustratives, sans appel de modèle.",
+                        )}
+                      </p>
+                    )}
+                  </section>
+                ))}
               </div>
-              <label className="field">
-                <span>{t("Sections per viewport", "Sections par vue")}</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={6}
-                  value={spec.max_sections}
-                  onChange={(e) =>
-                    edit({ ...spec, max_sections: Number(e.target.value) })
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>
-                  {t("Representative personas", "Personas représentatifs")}
-                </span>
-                <input
-                  type="number"
-                  min={1}
-                  max={24}
-                  value={spec.persona_count}
-                  onChange={(e) =>
-                    edit({ ...spec, persona_count: Number(e.target.value) })
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>
-                  {t("Direct-image controls", "Contrôles par image directe")}
-                </span>
-                <input
-                  type="number"
-                  min={0}
-                  max={Math.min(4, spec.persona_count)}
-                  value={spec.direct_vision_count}
-                  onChange={(e) =>
+              {spec.variants.length === 1 && (
+                <button
+                  className="button secondary compact page-add-variant"
+                  onClick={() =>
                     edit({
                       ...spec,
-                      direct_vision_count: Number(e.target.value),
+                      variants: [...spec.variants, variant("B")],
                     })
                   }
+                >
+                  <Plus />
+                  {t("Add paired variant B", "Ajouter la variante B appariée")}
+                </button>
+              )}
+              <div className="page-capture-options">
+                <div>
+                  <span className="page-field-title">
+                    {t("Capture viewports", "Vues à capturer")}
+                  </span>
+                  <div className="button-row">
+                    {(["desktop", "mobile"] as const).map((v) => (
+                      <label className="checkbox" key={v}>
+                        <input
+                          type="checkbox"
+                          checked={spec.viewports.includes(v)}
+                          onChange={(e) =>
+                            edit({
+                              ...spec,
+                              viewports: e.target.checked
+                                ? [...spec.viewports, v]
+                                : spec.viewports.filter((x) => x !== v),
+                            })
+                          }
+                        />
+                        {v === "desktop" ? (
+                          <Monitor size={17} />
+                        ) : (
+                          <DeviceMobile size={17} />
+                        )}{" "}
+                        {v === "desktop"
+                          ? t("Desktop", "Ordinateur")
+                          : t("Mobile", "Mobile")}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <label className="field">
+                  <span>{t("Sections per viewport", "Sections par vue")}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={6}
+                    value={spec.max_sections}
+                    onChange={(e) =>
+                      edit({ ...spec, max_sections: Number(e.target.value) })
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>
+                    {t("Representative personas", "Personas représentatifs")}
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={24}
+                    value={spec.persona_count}
+                    onChange={(e) =>
+                      edit({ ...spec, persona_count: Number(e.target.value) })
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>
+                    {t("Direct-image controls", "Contrôles par image directe")}
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={Math.min(4, spec.persona_count)}
+                    value={spec.direct_vision_count}
+                    onChange={(e) =>
+                      edit({
+                        ...spec,
+                        direct_vision_count: Number(e.target.value),
+                      })
+                    }
+                  />
+                </label>
+              </div>
+              <label className="field">
+                <span>
+                  {t(
+                    "Advertisement that led to the page",
+                    "Publicité ayant conduit à la page",
+                  )}
+                </span>
+                <textarea
+                  rows={2}
+                  maxLength={2000}
+                  value={spec.advertisement_context}
+                  onChange={(e) =>
+                    edit({ ...spec, advertisement_context: e.target.value })
+                  }
+                  placeholder={t(
+                    "Preserve the promise and expectations from the ad…",
+                    "Conservez la promesse et les attentes créées par la publicité…",
+                  )}
                 />
               </label>
+              <div className="page-capture-submit">
+                <p>
+                  {t(
+                    "The first viewport is retained separately. Personas see sections progressively; later information is not included in their first impression.",
+                    "Le premier écran est conservé séparément. Les personas découvrent les sections progressivement ; leur première impression n’inclut pas les informations suivantes.",
+                  )}
+                </p>
+                <button
+                  className="button"
+                  disabled={
+                    !providers?.capture.available || anotherActive || jobActive
+                  }
+                  onClick={capture}
+                >
+                  {busy === "capture" ? (
+                    <SpinnerGap className="spin" />
+                  ) : (
+                    <Camera />
+                  )}
+                  {t("Capture locally", "Capturer localement")}
+                </button>
+              </div>
+              {providers && !providers.capture.available && (
+                <p className="inline-warning">{providers.capture.reason}</p>
+              )}
             </div>
-            <label className="field">
-              <span>
-                {t(
-                  "Advertisement that led to the page",
-                  "Publicité ayant conduit à la page",
-                )}
-              </span>
-              <textarea
-                rows={2}
-                maxLength={2000}
-                value={spec.advertisement_context}
-                onChange={(e) =>
-                  edit({ ...spec, advertisement_context: e.target.value })
-                }
-                placeholder={t(
-                  "Preserve the promise and expectations from the ad…",
-                  "Conservez la promesse et les attentes créées par la publicité…",
-                )}
-              />
-            </label>
-            <div className="page-capture-submit">
-              <p>
-                {t(
-                  "The first viewport is retained separately. Personas see sections progressively; later information is not included in their first impression.",
-                  "Le premier écran est conservé séparément. Les personas découvrent les sections progressivement ; leur première impression n’inclut pas les informations suivantes.",
-                )}
-              </p>
-              <button
-                className="button"
-                disabled={
-                  !providers?.capture.available || anotherActive || jobActive
-                }
-                onClick={capture}
-              >
-                {busy === "capture" ? (
-                  <SpinnerGap className="spin" />
-                ) : (
-                  <Camera />
-                )}
-                {t("Capture locally", "Capturer localement")}
-              </button>
-            </div>
-            {providers && !providers.capture.available && (
-              <p className="inline-warning">{providers.capture.reason}</p>
-            )}
-          </div>
-        </section>
+          </section>
+        </details>
         {audits.length > 0 && (
           <label className="field page-history">
             <span>
@@ -1007,157 +1035,169 @@ export default function PageAnalysis({
                 )}
               </section>
             )}
-            <section className="worksheet page-analysis-choice">
-              <div className="sheet-header">
-                <h2>
-                  {t("Choose how to analyse", "Choisissez comment analyser")}
-                </h2>
-                <span className="chip">
-                  {t("Explicit dispatch", "Envoi explicite")}
-                </span>
-              </div>
-              <div className="padded">
-                <div className="form-grid">
-                  <label className="field">
-                    <span>
-                      {t(
-                        "Analysis provider / model",
-                        "Fournisseur / modèle d’analyse",
-                      )}
-                    </span>
-                    <select
-                      value={providerId}
-                      disabled={
-                        jobActive ||
-                        ["cancelled", "interrupted", "failed"].includes(
-                          audit.status,
-                        )
-                      }
-                      onChange={(e) => {
-                        setProviderId(e.target.value as ProviderId);
-                        setAllowRemote(false);
-                      }}
-                    >
-                      {providers?.providers.map((p) => (
-                        <option key={p.id} value={p.id} disabled={!p.available}>
-                          {p.name} · {p.model ?? "—"} ·{" "}
-                          {p.scope === "remote"
-                            ? t("remote", "distant")
-                            : t("local", "local")}
-                          {!p.available
-                            ? ` · ${t("unavailable", "indisponible")}`
-                            : ""}
-                        </option>
-                      ))}
-                    </select>
-                    <small>{selectedProvider?.reason}</small>
-                  </label>
-                  <div className="page-cost-cap">
-                    <span>
-                      {t("Saved real API cap", "Plafond API réel enregistré")}
-                    </span>
-                    <strong>
-                      {money(study.spec.api_budget_usd * 100, "USD", lang)}
-                    </strong>
-                    <button className="text-button" onClick={onOpenBrief}>
-                      {t(
-                        "Edit in a new brief",
-                        "Modifier dans un nouveau brief",
-                      )}
-                    </button>
-                    <small>
-                      {t(
-                        "Shared study ledger. Virtual media spending is separate.",
-                        "Registre partagé de l’étude. Le budget média virtuel est distinct.",
-                      )}
-                    </small>
-                  </div>
-                </div>
-                {providerId === "demo" && !allDemo && (
-                  <p className="inline-warning">
-                    {t(
-                      "Demo analysis only accepts fictional captures. Choose an available vision provider for this page.",
-                      "L’analyse de démonstration accepte uniquement les captures fictives. Choisissez un fournisseur visuel disponible pour cette page.",
-                    )}
-                  </p>
+            <details className="page-analysis-settings" open={!audit.report}>
+              <summary>
+                {t(
+                  "Analysis model, permissions and real costs",
+                  "Modèle, autorisations et coûts réels de l’analyse",
                 )}
-                {isRemote && (
-                  <label className="checkbox page-remote-consent">
-                    <input
-                      type="checkbox"
-                      checked={allowRemote}
-                      disabled={jobActive}
-                      onChange={(e) => setAllowRemote(e.target.checked)}
-                    />
-                    <span>
-                      {t(
-                        `Send the selected screenshots, visible page evidence and sampled persona context to ${selectedProvider?.name} / ${selectedProvider?.model}.`,
-                        `Envoyer les captures choisies, les éléments visibles et le contexte des personas échantillonnés à ${selectedProvider?.name} / ${selectedProvider?.model}.`,
-                      )}
+              </summary>
+              <section className="worksheet page-analysis-choice">
+                <div className="sheet-header">
+                  <h2>
+                    {t("Choose how to analyse", "Choisissez comment analyser")}
+                  </h2>
+                  <span className="chip">
+                    {t("Explicit dispatch", "Envoi explicite")}
+                  </span>
+                </div>
+                <div className="padded">
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>
+                        {t(
+                          "Analysis provider / model",
+                          "Fournisseur / modèle d’analyse",
+                        )}
+                      </span>
+                      <select
+                        value={providerId}
+                        disabled={
+                          jobActive ||
+                          ["cancelled", "interrupted", "failed"].includes(
+                            audit.status,
+                          )
+                        }
+                        onChange={(e) => {
+                          setProviderId(e.target.value as ProviderId);
+                          setAllowRemote(false);
+                        }}
+                      >
+                        {providers?.providers.map((p) => (
+                          <option
+                            key={p.id}
+                            value={p.id}
+                            disabled={!p.available}
+                          >
+                            {p.name} · {p.model ?? "—"} ·{" "}
+                            {p.scope === "remote"
+                              ? t("remote", "distant")
+                              : t("local", "local")}
+                            {!p.available
+                              ? ` · ${t("unavailable", "indisponible")}`
+                              : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <small>{selectedProvider?.reason}</small>
+                    </label>
+                    <div className="page-cost-cap">
+                      <span>
+                        {t("Saved real API cap", "Plafond API réel enregistré")}
+                      </span>
+                      <strong>
+                        {money(study.spec.api_budget_usd * 100, "USD", lang)}
+                      </strong>
+                      <button className="text-button" onClick={onOpenBrief}>
+                        {t(
+                          "Edit in a new brief",
+                          "Modifier dans un nouveau brief",
+                        )}
+                      </button>
                       <small>
                         {t(
-                          "This authorizes this analysis within the saved real cap. It does not grant unlimited calls. Consent resets when the provider, capture or study changes.",
-                          "Cette autorisation concerne cette analyse dans le plafond réel enregistré. Elle n’autorise pas des appels illimités. Le consentement est réinitialisé au changement de fournisseur, capture ou étude.",
+                          "Shared study ledger. Virtual media spending is separate.",
+                          "Registre partagé de l’étude. Le budget média virtuel est distinct.",
                         )}
                       </small>
-                    </span>
-                  </label>
-                )}
-                {isRemote && study.spec.api_budget_usd <= 0 && (
-                  <p className="inline-warning">
+                    </div>
+                  </div>
+                  {providerId === "demo" && !allDemo && (
+                    <p className="inline-warning">
+                      {t(
+                        "Demo analysis only accepts fictional captures. Choose an available vision provider for this page.",
+                        "L’analyse de démonstration accepte uniquement les captures fictives. Choisissez un fournisseur visuel disponible pour cette page.",
+                      )}
+                    </p>
+                  )}
+                  {isRemote && (
+                    <label className="checkbox page-remote-consent">
+                      <input
+                        type="checkbox"
+                        checked={allowRemote}
+                        disabled={jobActive}
+                        onChange={(e) => setAllowRemote(e.target.checked)}
+                      />
+                      <span>
+                        {t(
+                          `Send the selected screenshots, visible page evidence and sampled persona context to ${selectedProvider?.name} / ${selectedProvider?.model}.`,
+                          `Envoyer les captures choisies, les éléments visibles et le contexte des personas échantillonnés à ${selectedProvider?.name} / ${selectedProvider?.model}.`,
+                        )}
+                        <small>
+                          {t(
+                            "This authorizes this analysis within the saved real cap. It does not grant unlimited calls. Consent resets when the provider, capture or study changes.",
+                            "Cette autorisation concerne cette analyse dans le plafond réel enregistré. Elle n’autorise pas des appels illimités. Le consentement est réinitialisé au changement de fournisseur, capture ou étude.",
+                          )}
+                        </small>
+                      </span>
+                    </label>
+                  )}
+                  {isRemote && study.spec.api_budget_usd <= 0 && (
+                    <p className="inline-warning">
+                      {t(
+                        "Prepare a brief with a positive real API cap before remote analysis.",
+                        "Préparez un brief avec un plafond API réel positif avant l’analyse distante.",
+                      )}
+                    </p>
+                  )}
+                  {draftChanged && (
+                    <p className="inline-warning">
+                      {t(
+                        "The capture draft changed. Capture it locally before analysing those changes.",
+                        "Le brouillon de capture a changé. Capturez-le localement avant d’analyser ces changements.",
+                      )}
+                    </p>
+                  )}
+                  <p className="page-analysis-explanation">
                     {t(
-                      "Prepare a brief with a positive real API cap before remote analysis.",
-                      "Préparez un brief avec un plafond API réel positif avant l’analyse distante.",
+                      "The observer describes visible evidence first. Synthetic personas then receive only the section they have reached, preserving the advertisement context. A bounded direct-image sample checks information lost or added by the shared observer.",
+                      "L’observateur décrit d’abord les éléments visibles. Les personas synthétiques ne reçoivent ensuite que la section atteinte, avec le contexte publicitaire. Un échantillon limité voit directement les images pour contrôler les pertes et ajouts de l’observateur commun.",
                     )}
                   </p>
-                )}
-                {draftChanged && (
-                  <p className="inline-warning">
-                    {t(
-                      "The capture draft changed. Capture it locally before analysing those changes.",
-                      "Le brouillon de capture a changé. Capturez-le localement avant d’analyser ces changements.",
+                  <button
+                    className="button"
+                    disabled={analyzingBlocked}
+                    onClick={analyze}
+                  >
+                    {busy === "analyze" ? (
+                      <SpinnerGap className="spin" />
+                    ) : (
+                      <Eye />
                     )}
-                  </p>
-                )}
-                <p className="page-analysis-explanation">
-                  {t(
-                    "The observer describes visible evidence first. Synthetic personas then receive only the section they have reached, preserving the advertisement context. A bounded direct-image sample checks information lost or added by the shared observer.",
-                    "L’observateur décrit d’abord les éléments visibles. Les personas synthétiques ne reçoivent ensuite que la section atteinte, avec le contexte publicitaire. Un échantillon limité voit directement les images pour contrôler les pertes et ajouts de l’observateur commun.",
-                  )}
-                </p>
-                <button
-                  className="button"
-                  disabled={analyzingBlocked}
-                  onClick={analyze}
-                >
-                  {busy === "analyze" ? (
-                    <SpinnerGap className="spin" />
-                  ) : (
-                    <Eye />
-                  )}
-                  {t("Analyse captured page", "Analyser la page capturée")}
-                </button>
-                <details className="page-pricing">
-                  <summary>
-                    {t(
-                      "Model prices, limits & actual cost record",
-                      "Prix du modèle, limites et coûts réels",
-                    )}
-                  </summary>
-                  <h3>
-                    {t("Configured pricing assumptions", "Tarifs configurés")}
-                  </h3>
-                  <pre>{plain(selectedProvider?.pricing ?? {})}</pre>
-                  <h3>
-                    {t(
-                      "Shared study cost ledger",
-                      "Registre des coûts partagé de l’étude",
-                    )}
-                  </h3>
-                  <pre>{plain(audit.cost)}</pre>
-                </details>
-              </div>
-            </section>
+                    {t("Analyse captured page", "Analyser la page capturée")}
+                  </button>
+                  <details className="page-pricing">
+                    <summary>
+                      {t(
+                        "Model prices, limits & actual cost record",
+                        "Prix du modèle, limites et coûts réels",
+                      )}
+                    </summary>
+                    <h3>
+                      {t("Configured pricing assumptions", "Tarifs configurés")}
+                    </h3>
+                    <pre>{plain(selectedProvider?.pricing ?? {})}</pre>
+                    <h3>
+                      {t(
+                        "Shared study cost ledger",
+                        "Registre des coûts partagé de l’étude",
+                      )}
+                    </h3>
+                    <pre>{plain(audit.cost)}</pre>
+                  </details>
+                </div>
+              </section>
+            </details>
             {audit.report && (
               <PageReport
                 onSelectSnapshot={(id) => {
@@ -1557,52 +1597,62 @@ function PageReport({
           </div>
         </div>
       </section>
-      <AuditRecords
-        onSelectSnapshot={onSelectSnapshot}
-        title={t("Section findings", "Constats par section")}
-        records={r.findings}
-        lang={lang}
-      />
-      <AuditRecords
-        onSelectSnapshot={onSelectSnapshot}
-        title={t("Paired A/B comparison", "Comparaison A/B appariée")}
-        records={r.comparisons}
-        lang={lang}
-      />
-      <AuditRecords
-        onSelectSnapshot={onSelectSnapshot}
-        title={t(
-          "Direct-image control comparison",
-          "Comparaison du contrôle par image directe",
-        )}
-        records={r.direct_vision_controls}
-        lang={lang}
-      />
-      <section className="worksheet">
-        <div className="sheet-header">
-          <h2>
-            {t("Coverage, limits & receipts", "Couverture, limites et reçus")}
-          </h2>
-          <span className="chip">{r.mode}</span>
-        </div>
-        <div className="padded">
-          <ul>
-            {r.limitations.map((v, i) => (
-              <li key={i}>{v}</li>
-            ))}
-          </ul>
-          <details>
-            <summary>{t("Audience coverage", "Couverture du public")}</summary>
-            <pre>{plain(r.audience_coverage)}</pre>
-          </details>
-          <details>
-            <summary>
-              {t("Actual inference receipts", "Reçus d’inférence réels")}
-            </summary>
-            <pre>{plain(r.cost)}</pre>
-          </details>
-        </div>
-      </section>
+      <details className="page-diagnostic-details">
+        <summary>
+          {t(
+            "Comparisons, controls and provenance",
+            "Comparaisons, contrôles et traçabilité",
+          )}
+        </summary>
+        <AuditRecords
+          onSelectSnapshot={onSelectSnapshot}
+          title={t("Section findings", "Constats par section")}
+          records={r.findings}
+          lang={lang}
+        />
+        <AuditRecords
+          onSelectSnapshot={onSelectSnapshot}
+          title={t("Paired A/B comparison", "Comparaison A/B appariée")}
+          records={r.comparisons}
+          lang={lang}
+        />
+        <AuditRecords
+          onSelectSnapshot={onSelectSnapshot}
+          title={t(
+            "Direct-image control comparison",
+            "Comparaison du contrôle par image directe",
+          )}
+          records={r.direct_vision_controls}
+          lang={lang}
+        />
+        <section className="worksheet">
+          <div className="sheet-header">
+            <h2>
+              {t("Coverage, limits & receipts", "Couverture, limites et reçus")}
+            </h2>
+            <span className="chip">{r.mode}</span>
+          </div>
+          <div className="padded">
+            <ul>
+              {r.limitations.map((v, i) => (
+                <li key={i}>{v}</li>
+              ))}
+            </ul>
+            <details>
+              <summary>
+                {t("Audience coverage", "Couverture du public")}
+              </summary>
+              <pre>{plain(r.audience_coverage)}</pre>
+            </details>
+            <details>
+              <summary>
+                {t("Actual inference receipts", "Reçus d’inférence réels")}
+              </summary>
+              <pre>{plain(r.cost)}</pre>
+            </details>
+          </div>
+        </section>
+      </details>
     </div>
   );
 }

@@ -5,12 +5,14 @@ Root owns shared `models.py`, API/jobs/CLI, packaging and integration. Independe
 ## Engine
 
 - `personas.generate_personas(product: ProductSpec, audience: AudienceSpec, research: TrendReport | None = None, seed: int = 42, limit: int = 200) -> list[Persona]`: bounded displayed representatives, not the numerical population.
+- `Persona.skepticism`: age-independent, heterogeneous synthetic trait derived without shifting the existing population random stream. `credibility.assess_product_credibility(product, research=None, overrides=None)` returns an unverified rule-based assessment. Prepared/loaded studies expose `product_credibility`; new reports freeze it under `metadata.product_credibility` with `numeric_policy`.
 - `media.propose_plans(product: ProductSpec, audience: AudienceSpec, budget_cents: int, research: TrendReport | None = None) -> list[MediaPlan]`: exactly three editable product-aware candidates.
 - `media.channel_catalog() -> list[dict]`: executable channel/format/cost assumptions.
 - `simulation.simulate_scenario(product, audience, plan, days, seed, *, research=None, fatigue_multiplier=1.0, price_elasticity=1.0, on_day=None, checkpoint_path=None, cancel_check=None) -> dict`: numeric individuals. Checkpoint includes deterministic stream/state; cancel raises `SimulationCancelled`.
 - `simulation.compare_strategies(spec: StudySpec, plans: list[MediaPlan], *, research=None, on_progress=None, checkpoint_dir=None, cancel_check=None) -> dict`: three candidates plus baseline per distinct price, exploration/validation seeds, bounded cached replicas, reproducible resume. Progress callback receives dict with percent, message, day, scenario. Use own reports.py for financial/statistical summaries.
 - Report contract: `schema_version`, `engine_version`, `product`, `population`, `rounds`, `seed`, `winner_id` (nullable), `winner_reason`, `assumptions` (strings), `personas` (bounded), `scenarios` (list), `comparisons` (list), `metadata` (dict). Scenario: `plan_id`, `name`, `is_baseline`, `price_cents`, `mean_revenue_cents`, `median_revenue_cents`, `revenue_interval_cents`, `mean_units`, `mean_spend_cents`, `mean_cac_cents` (nullable), `mean_paid_cac_cents` (nullable), `daily`, `channels`, `traces`, `adjustments`, `replicate_totals`.
 - Daily rows: `day`, `units`, `revenue_cents`, `spend_cents`, `cumulative_units`, `cumulative_revenue_cents`, `cumulative_spend_cents`, `mean_intention`, `mean_fatigue`. Channels: `channel`, `impressions`, `unique_reach`, `clicks`, `units`, `revenue_cents`, `spend_cents`, `attributed_conversion_rate`, `exposed_purchase_rate`, `cac_cents`.
+- Numeric10 adds conditional perception metrics to scenario/daily rows (`mean_scam_suspicion`, `mean_credibility_acceptance`) and splits skeptical/non-skeptical comment events. These are modelled priors/events, not audience polls or proven fraud. State checkpoints include changing perception arrays; assessment fingerprints separate incompatible cases.
 
 ## Research / memory / gateway
 
@@ -47,3 +49,9 @@ Canonical contracts: `page_models.py`. `PageAuditSpec` accepts one/two variants 
 The worker claims a fresh attempt nonce and registers its actual interpreter PID/creation time, including Windows virtual-environment launchers. Committed captures remain visible after cancellation. Analysis stages are journaled individually; uncertain dispatches block replay.
 
 `capture_pages(spec, assets_dir, on_progress=..., cancel_check=...)` yields viewport-sized snapshots. `analyze_page_audit(audit, assets_dir=..., ledger=..., journal_path=..., provider_id=..., allow_remote=...)` returns `PageAuditReport`. Each reader context contains one persona and its own history. A/B comparisons use the common exposure horizon and disclose unequal coverage. Proposed actions are recorded under a fixed inspection schedule; they are not autonomous navigation.
+
+## Guided market contract
+
+`POST /api/v1/studies/launch {spec: StudySpec}` returns202 `{study, run, research_error}`. It prepares a saved study, optionally collects supplied public URLs without providers, and queues one worker. Paid flags are rejected before creation.
+
+Backward-compatible additions: StudySpec.objective defaults to `campaign`; market defaults to incumbent_share0.6, switching_friction0.5, addressable_populationnull, product_url empty and competitor_urls empty. Discovery attaches `report.market_analysis`. Scenarios expose full-population `age_segments` and `market_switching`; summaries use validation means and conditional replica intervals. EvidenceSource.url_reference_hash is a defaulted opaque association key independent of redacted public URLs. [Detailed semantics](MARKET-STUDY.md).

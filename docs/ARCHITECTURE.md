@@ -33,6 +33,7 @@ flowchart TD
 - `models.py`: versioned Pydantic input contracts, inclusive adult ages and monetary constraints.
 - `research.py`, `gateway.py`, `representatives.py`: source-bound extraction and optional external work. Actual text remains data. No external page may select tools, edit budgets or grant actions.
 - `personas.py`, `media.py`, `simulation.py`, `reports.py`: native individual-based model. No provider credentials or network requests in the numeric engine.
+- `credibility.py`: auditable product-claim triage and explicitly unverified priors. Numeric11 retains heterogeneous skepticism across acquisition routes; ordinary outcomes retain the earlier numeric projection. No claim screen is a factual fraud verdict.
 - `storage.py`, `jobs.py`, `worker.py`: durable study/run state, real process ownership, cancellation and checkpoints. An observation timeout alone never identifies a lost worker.
 - `services.py`, `api.py`, `cli.py`: common application operations, local host/origin checks, write-session token and portable reports.
 - `memory.py`, `graphiti_bridge.py`: study-scoped local retrieval and optional explicitly selected read-only namespace import.
@@ -44,6 +45,8 @@ Each synthetic person has independent traits, money, exposures and acquisition s
 Live files belong in the platform-local application-data directory (`SpillTheMarket`), not a synced/network filesystem. SQLite WAL serializes short transactions. Per-run snapshots capture product, audience, plans and research; later edits do not change a running experiment.
 
 Checkpoints commit a whole simulated day atomically with a model/input fingerprint. Completed replica results stay available for resumption. Cancellation preserves committed work. Provider reservations are independent of simulation checkpoints: a failed day cannot erase already incurred/uncertain external charges.
+
+`atomic_io.py` owns unique exclusive staging, flush/fsync/close and bounded replacement retries for short Windows sharing denials. The committed destination is never removed or truncated to work around a lock. Permanent failures preserve its prior state and provide recovery context. Both checkpoints and final reports use this primitive; model/assessment fingerprints prevent cross-version state mixing.
 
 FTS5 is lexical retrieval plus graph traversal, not a claim of semantic embedding parity. It needs no model download. Imported source statements remain unverified; simulated beliefs/results never become external market evidence.
 
@@ -66,3 +69,7 @@ Vite writes precompiled assets under `src/spill_market/web`. The Python wheel in
 `page_capture.py` isolates public-resource retrieval by validated IP and produces viewport JPEGs; scripts are disabled. Imported HTML is offline and tall images are cropped before exposure. `page_vision.py` provides explicit remote/local model configuration, image-aware accounting and a no-replay stage journal. `page_analysis.py` grounds observations and gives each persona only its own history and current evidence. Paired comparisons disclose their common observation horizon and coverage differences.
 
 The same study ledger bounds real charges. Page findings remain descriptive synthetic hypotheses and do not automatically alter the numerical sales engine. [Setup, contracts and limitations](PAGE-ANALYSIS.md).
+
+## Guided market workflow
+
+`services.guided_launch` prepares a durable study, optionally collects supplied public URLs for free and queues one numerical worker; paid flags require their separate action. `market_analysis.py` combines full-population age aggregates and optional switching subsets with grounded references, barriers and next actions. `evidence_urls.py` separates opaque requested-URL identity from redacted public links, including redirects. Age/channel recommendations can be inconclusive and no real market size is inferred. [Contract and limits](MARKET-STUDY.md).

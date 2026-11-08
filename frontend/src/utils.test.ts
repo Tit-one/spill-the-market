@@ -1,5 +1,26 @@
 import { describe, it, expect } from "vitest";
-import { money, percent, safeURL, validateSpec, initialSpec } from "./utils";
+import {
+  money,
+  percent,
+  safeURL,
+  validateSpec,
+  initialSpec,
+  planName,
+} from "./utils";
+it("translates only matching built-in strategy names and preserves custom names", () => {
+  expect(
+    planName({ plan_id: "value", name: "Accessible discovery" }, "fr"),
+  ).toBe("Découverte accessible");
+  expect(planName({ id: "balanced", name: "Notre lancement" }, "fr")).toBe(
+    "Notre lancement",
+  );
+  expect(
+    planName({ plan_id: "custom", name: "Accessible discovery" }, "fr"),
+  ).toBe("Accessible discovery");
+  expect(
+    planName({ id: "premium", name: "Focused premium launch" }, "en"),
+  ).toBe("Focused premium launch");
+});
 describe("report values retain their meaning", () => {
   it("distinguishes undefined CAC from zero CAC", () => {
     expect(money(null)).toBe("—");

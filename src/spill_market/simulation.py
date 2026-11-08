@@ -8,23 +8,48 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import os
 from pathlib import Path
 from typing import Callable
 
 import numpy as np
 
+from .atomic_io import AtomicWriteCancelled, atomic_write
+from .credibility import assess_product_credibility
 from .media import channel_catalog
-from .models import AudienceSpec, MediaPlan, ProductSpec, StudySpec, TrendReport
+from .models import AudienceSpec, MarketAssumptions, MediaPlan, ProductSpec, StudySpec, TrendReport
 from .personas import AGE_CHANNEL_PRIORS, CHANNELS, generate_personas, initialize_population
 from .reports import paired_comparison, paired_revenue_comparison, summarize_scenario
 
-ENGINE_VERSION = "0.1.0-numeric-9"
+ENGINE_VERSION = "0.2.0-numeric-11"
 MAX_TRACE_PERSONS = 20
 MAX_CACHE_REPLICAS = 600
 MUTABLE_FIELDS = ("budget_cents", "purchased", "intention", "awareness", "fatigue", "last_channel",
                   "last_exposure_day", "last_click_hour", "last_view_channel", "last_view_hour",
-                  "earned_pending", "trend_adopted", "cpa_reserved_until")
+                  "earned_pending", "trend_adopted", "cpa_reserved_until",
+                  "scam_suspicion", "credibility_acceptance", "purchase_channel",
+                  "incumbent_user", "switching_acceptance")
+
+AGE_BANDS = ((18, 24), (25, 34), (35, 44), (45, 54), (55, 64), (65, 100))
+SWITCHING_ASSUMPTIONS = [
+    "Incumbent membership and individual switching friction are synthetic, unvalidated assumptions, not observed competitor customers.",
+    "Disjoint seed/individual streams assign membership and a friction sensitivity from 0.5 to 1, independently of age and strategy.",
+    "In market discovery only, incumbent intention gains and both purchase hazards are multiplied by 1 minus declared friction times individual sensitivity; zero friction is neutral.",
+    "Switchers and new-to-category buyers partition existing first purchases; they are not additional sales. Retained incumbents include every incumbent who did not buy.",
+    "Addressable population is a separate owner assumption and never expands or weights numerical buyers in this engine.",
+]
+
+CREDIBILITY_POLICY = {
+    "status": "unvalidated_assumption", "ordinary_additional_factor": 1.0,
+    "acceptance_bounds": [.0005, 1.0], "suspicion_bounds": [0.0, .995],
+    "assessment_score_bounds": [0.0, 1.0], "assessment_suspicion_bounds": [0.0, 1.0],
+    "individual_inputs": ["trust", "price_sensitivity", "skepticism", "seeded_gullibility"],
+    "age_rule": "No age enters claim acceptance; individuals vary within every adult age.",
+    "routes": "Nonordinary acceptance multiplies paid/organic/social intention gains and both purchase hazards, and caps accumulated intention.",
+    "repetition": "Exposure can increase hypothetical suspicion, never validate a claim or remove the acceptance cap.",
+    "comments": "Skeptical comments lower own intention and are excluded from positive recommendation, trend and creator propagation.",
+    "positive_comment_meaning": "Non-skeptical or curious synthetic reactions; not observed endorsement.",
+    "meaning": "Modelled consumer suspicion, not observed deception, a fraud finding, scientific fact verification or a forecast.",
+}
 
 ASSUMPTIONS = [
     "All people, purchasing power, needs, platform availability, costs and response coefficients are synthetic hypotheses, not observed demographics or platform estimates.",
@@ -48,6 +73,10 @@ ASSUMPTIONS = [
     "The primary objective is maximum total virtual revenue (CA), selected on exploration means across the three strategies. Contribution and price-matched no-campaign increments are separate diagnostics. A winner needs paired validation revenue superiority beyond a 1% practical margin against both alternatives; unavailable or overlapping intervals are indecisive.",
     "Intervals describe stochastic variability conditional on the submitted model, not real-world confidence or individual predictions.",
     "Displayed trajectories are validation means; bounded traces show the first validation replica and cannot represent every buyer. Numerical acquisition and attribution totals reconcile exactly within each replica.",
+    "Extraordinary-claim triage and consumer skepticism are unvalidated model assumptions, not a finding of fraud or scientific verification. Ordinary products retain the existing response mechanism unchanged. Nonordinary acceptance varies by trust, price sensitivity, skepticism and seeded gullibility; no age-based acceptance rule is used.",
+    "For nonordinary claims, all paid, organic and social intention gains and both purchase hazards are reduced by individual credibility acceptance. Accumulated intention is capped by that acceptance, so repetition cannot wash out unsupported promises. Repetition may increase hypothetical suspicion. Skeptical comments do not count as positive recommendations or create earned promotional exposure.",
+    "Age segments aggregate every numerical individual, not displayed representatives or traces. Segment channel units retain the actual purchase attribution even after its touch expires. Natural/unattributed purchases are separately reconciled.",
+    *SWITCHING_ASSUMPTIONS,
 ]
 
 
@@ -128,20 +157,34 @@ def _queue_social(state: dict, placement_index: int, senders: np.ndarray, *, see
     return edges
 
 
-def _atomic_json(path: Path, value: dict):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(value, ensure_ascii=False, allow_nan=False), encoding="utf-8")
-    os.replace(temporary, path)
+def _atomic_json(path: Path, value: dict, *, cancel_check=None):
+    data = json.dumps(value, ensure_ascii=False, allow_nan=False).encode("utf-8")
+    try:
+        atomic_write(path, lambda stream: stream.write(data), description="replica result", cancel_check=cancel_check)
+    except AtomicWriteCancelled as error:
+        raise SimulationCancelled(str(error)) from error
 
 
-def _save_checkpoint(path: Path, fingerprint: str, state: dict, reached: np.ndarray, metadata: dict):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    with temporary.open("wb") as stream:
+def _load_checkpoint(path: Path, fingerprint: str, *, arrays=True):
+    with np.load(path, allow_pickle=False) as data:
+        saved = json.loads(str(data["_metadata"]))
+        if saved["fingerprint"] != fingerprint:
+            raise ValueError("The checkpoint belongs to a different scenario or engine version; existing file preserved")
+        state = {key: data[key].copy() for key in MUTABLE_FIELDS} if arrays else {}
+        reached = data["_reached"].copy() if arrays else None
+    return state, reached, saved
+
+
+def _save_checkpoint(path: Path, fingerprint: str, state: dict, reached: np.ndarray, metadata: dict, *, cancel_check=None):
+    if path.exists():
+        _load_checkpoint(path, fingerprint, arrays=False)
+    def write(stream):
         np.savez_compressed(stream, **{key: state[key] for key in MUTABLE_FIELDS}, _reached=reached,
                             _metadata=np.array(json.dumps({"fingerprint": fingerprint, **metadata})))
-    os.replace(temporary, path)
+    try:
+        atomic_write(path, write, description="checkpoint", cancel_check=cancel_check)
+    except AtomicWriteCancelled as error:
+        raise SimulationCancelled(str(error)) from error
 
 
 def _response(placement, catalog: dict, state: dict, price_acceptance: np.ndarray):
@@ -183,15 +226,84 @@ def _response(placement, catalog: dict, state: dict, price_acceptance: np.ndarra
     return availability, click, persuasion
 
 
+def _claim_acceptance(state: dict, assessment: dict, gullibility: np.ndarray) -> np.ndarray:
+    willingness = ((.25 + .55 * state["trust"] + .35 * gullibility) *
+                   (1 - .25 * state["price_sensitivity"]) * (1 - .3 * state["skepticism"]))
+    response = assessment["score"] * willingness * (1 - state["scam_suspicion"]) ** 1.5
+    ceiling = assessment["score"] * (.65 + .6 * gullibility) * (1 - .2 * state["price_sensitivity"])
+    return np.clip(np.minimum(response, np.maximum(.0005, ceiling)), .0005, 1.0)
+
+
+def _age_segments(state, reached, audience, price_cents, channels):
+    rows = []
+    for lower, upper in AGE_BANDS:
+        lower, upper = max(lower, audience.age_min), min(upper, audience.age_max)
+        if lower > upper:
+            continue
+        cohort = (state["age"] >= lower) & (state["age"] <= upper)
+        population = int(np.count_nonzero(cohort))
+        buyers = cohort & state["purchased"]
+        units = int(np.count_nonzero(buyers))
+        channel_rows = []
+        for channel in channels:
+            cidx = CHANNELS.index(channel)
+            reach = int(np.count_nonzero(cohort & reached[cidx]))
+            attributed = int(np.count_nonzero(buyers & (state["purchase_channel"] == cidx)))
+            channel_rows.append({"channel": channel, "unique_reach": reach, "units": attributed,
+                                 "conversion_rate": attributed / reach if reach else None})
+        organic = int(np.count_nonzero(buyers & (state["purchase_channel"] < 0)))
+        assert units == organic + sum(row["units"] for row in channel_rows)
+        rows.append({"age_min": lower, "age_max": upper, "label": f"{lower}-{upper}",
+                     "population": population, "units": units, "organic_units": organic,
+                     "conversion_rate": units / population if population else None,
+                     "revenue_cents": units * price_cents,
+                     "mean_intention": float(state["intention"][cohort].mean()) if population else None,
+                     "channels": channel_rows})
+    return rows
+
+
+def _market_switching(state, objective, market):
+    population, buyers = len(state["id"]), int(np.count_nonzero(state["purchased"]))
+    enabled = objective == "market_discovery"
+    result = {"enabled": enabled, "status": "unvalidated_assumption" if enabled else "not_modelled",
+              "population": population, "buyers": buyers, "incumbent_share": market.incumbent_share,
+              "switching_friction": market.switching_friction,
+              "mean_switching_acceptance": float(state["switching_acceptance"].mean()),
+              "assumptions": SWITCHING_ASSUMPTIONS.copy()}
+    if enabled:
+        incumbent = state["incumbent_user"]
+        incumbent_users = int(np.count_nonzero(incumbent))
+        switchers = int(np.count_nonzero(incumbent & state["purchased"]))
+        new_buyers = buyers - switchers
+        result.update(incumbent_users=incumbent_users, non_incumbent_users=population - incumbent_users,
+                      switchers=switchers, new_to_category_buyers=new_buyers,
+                      retained_incumbents=incumbent_users - switchers,
+                      new_to_category_nonbuyers=population - incumbent_users - new_buyers)
+    else:
+        # Campaign mode never measured category membership: do not label its
+        # buyers as new category customers or zero incumbent customers.
+        result.update({key: None for key in ("incumbent_users", "non_incumbent_users", "switchers",
+                                           "new_to_category_buyers", "retained_incumbents", "new_to_category_nonbuyers")})
+    return result
+
+
 def simulate_scenario(product: ProductSpec, audience: AudienceSpec, plan: MediaPlan, days: int, seed: int, *,
                       research: TrendReport | None = None, fatigue_multiplier: float = 1.0,
                       price_elasticity: float = 1.0, on_day: Callable | None = None,
                       checkpoint_path=None, cancel_check: Callable | None = None,
-                      response_multipliers: dict | None = None, social_sharing_enabled: bool = True) -> dict:
+                      response_multipliers: dict | None = None, social_sharing_enabled: bool = True,
+                      credibility_overrides: dict | None = None, objective: str = "campaign",
+                      market: MarketAssumptions | dict | None = None) -> dict:
     if not 1 <= days <= 90:
         raise ValueError("days must be between 1 and 90")
     if fatigue_multiplier < 0 or price_elasticity <= 0:
         raise ValueError("Invalid fatigue or price elasticity")
+    if objective not in {"campaign", "market_discovery"}:
+        raise ValueError("Unknown study objective")
+    market = MarketAssumptions.model_validate(market or {})
+    switching_model = objective == "market_discovery" and market.switching_friction > 0 and market.incumbent_share > 0
+    assessment = assess_product_credibility(product, research=research, overrides=credibility_overrides)
+    skeptical_model = assessment["status"] != "ordinary"
     multipliers = dict(response_multipliers or {})
     if any(channel not in CHANNELS or not isinstance(value, (int, float)) or
            not math.isfinite(value) or not .8 <= value <= 1.2 for channel, value in multipliers.items()):
@@ -199,7 +311,8 @@ def simulate_scenario(product: ProductSpec, audience: AudienceSpec, plan: MediaP
     fingerprint = _digest({"engine": ENGINE_VERSION, "product": product.model_dump(),
                            "audience": audience.model_dump(), "plan": plan.model_dump(), "days": days,
                            "seed": seed, "fatigue": fatigue_multiplier, "elasticity": price_elasticity,
-                           "response_multipliers": multipliers, "social_sharing_enabled": social_sharing_enabled})
+                           "response_multipliers": multipliers, "social_sharing_enabled": social_sharing_enabled,
+                           "product_credibility": assessment, "objective": objective, "market": market.model_dump()})
     checkpoint = Path(checkpoint_path) if checkpoint_path is not None else None
     placements = sorted(plan.placements, key=lambda p: (min(p.dayparts), p.id))
     if len({p.id for p in placements}) != len(placements):
@@ -207,6 +320,22 @@ def simulate_scenario(product: ProductSpec, audience: AudienceSpec, plan: MediaP
     catalog = {c["channel"]: c for c in channel_catalog()}
     n = audience.population
     state = initialize_population(product, audience, seed)
+    state["purchase_channel"] = np.full(n, -1, dtype=np.int8)
+    state["incumbent_user"] = (_stream(seed, state["id"], 0, "market:incumbent-membership") < market.incumbent_share
+                               if objective == "market_discovery" else np.zeros(n, dtype=bool))
+    state["switching_acceptance"] = np.ones(n, dtype=float)
+    if switching_model:
+        sensitivity = .5 + .5 * _stream(seed, state["id"], 0, "market:switching-friction")
+        state["switching_acceptance"][state["incumbent_user"]] = (
+            1 - market.switching_friction * sensitivity[state["incumbent_user"]])
+    gullibility = _stream(seed, state["id"], 0, "credibility:gullibility")
+    if skeptical_model:
+        state["scam_suspicion"] = np.clip(assessment["scam_suspicion"] *
+            (.5 + .5 * state["skepticism"]) * (1 - .45 * gullibility), 0, .995)
+        state["credibility_acceptance"] = _claim_acceptance(state, assessment, gullibility)
+    else:
+        state["scam_suspicion"] = np.full(n, np.clip(assessment["scam_suspicion"], 0, .995), dtype=float)
+        state["credibility_acceptance"] = np.ones(n, dtype=float)
     state["earned_pending"] = np.zeros((len(placements), n), dtype=np.uint8)
     state["trend_adopted"] = np.zeros((len(CHANNELS), n), dtype=bool)
     state["cpa_reserved_until"] = np.full((len(placements), n), -1000, dtype=np.int16)
@@ -217,6 +346,7 @@ def simulate_scenario(product: ProductSpec, audience: AudienceSpec, plan: MediaP
                           "revenue_cents": 0, "spend_cents": 0, "view_attributed_units": 0,
                           "click_attributed_units": 0, "views": 0, "completions": 0, "skips": 0,
                           "comments": 0, "shares": 0, "trend_adoptions": 0, "creator_posts": 0,
+                          "skeptical_comments": 0, "positive_comments": 0,
                           "earned_impressions": 0, "nonmember_deliveries": 0,
                           "cross_community_deliveries": 0, "social_edges": [],
                           "reserved_liability_cents": 0, "released_liability_cents": 0,
@@ -228,12 +358,8 @@ def simulate_scenario(product: ProductSpec, audience: AudienceSpec, plan: MediaP
               "reserved_liability_cents": 0, "released_liability_cents": 0, "settled_liability_cents": 0}
     first_day = 1
     if checkpoint and checkpoint.exists():
-        with np.load(checkpoint, allow_pickle=False) as data:
-            saved = json.loads(str(data["_metadata"]))
-            if saved["fingerprint"] != fingerprint:
-                raise ValueError("The checkpoint belongs to a different scenario or engine version")
-            state.update({key: data[key].copy() for key in MUTABLE_FIELDS})
-            reached = data["_reached"].copy()
+        saved_state, reached, saved = _load_checkpoint(checkpoint, fingerprint)
+        state.update(saved_state)
         history, traces, adjustments = saved["history"], saved["traces"], saved["adjustments"]
         totals, frequencies, channel_totals = saved["totals"], saved["frequencies"], saved["channel_totals"]
         first_day = saved["day"] + 1
@@ -273,11 +399,12 @@ def simulate_scenario(product: ProductSpec, audience: AudienceSpec, plan: MediaP
         clicked_today = np.zeros(n, dtype=bool)
         questions = np.zeros(n, dtype=bool)
         commented_today = np.zeros(n, dtype=bool)
+        skeptical_today = np.zeros(n, dtype=bool)
         shared_today = np.zeros(n, dtype=bool)
         pending_today = state["earned_pending"].copy()
         state["earned_pending"].fill(0)
         social_daily = {"earned_impressions": 0, "comments": 0, "shares": 0, "creator_posts": 0,
-                        "trend_adoptions": 0}
+                        "trend_adoptions": 0, "skeptical_comments": 0, "positive_comments": 0}
         spend_by_placement = [0] * len(placements)
         impressions_by_placement = [0] * len(placements)
         day_budget = free_media_cash() // (days - day + 1)
@@ -368,11 +495,21 @@ def simulate_scenario(product: ProductSpec, audience: AudienceSpec, plan: MediaP
             if placement.channel == "in_game" and placement.format == "interstitial":
                 state["fatigue"] += counts * .09 * fatigue_multiplier
             fatigue_penalty = np.exp(-state["fatigue"] * (1.3 - state["fatigue_tolerance"]))
+            if skeptical_model:
+                state["scam_suspicion"] = np.minimum(.995, state["scam_suspicion"] +
+                    counts * .004 * assessment["scam_suspicion"] * (1 - gullibility) * (.3 + state["skepticism"]))
+                state["credibility_acceptance"] = _claim_acceptance(state, assessment, gullibility)
             creative_tokens = set(placement.creative.lower().split())
             message_fit = .75 + .25 * min(1, len(product_tokens & creative_tokens) / max(1, min(8, len(product_tokens))))
             interest = effective * persuasion * message_fit * (.25 + .75 * state["need_fit"]) * fatigue_penalty
+            if switching_model:
+                interest *= state["switching_acceptance"]
             state["awareness"] = np.minimum(1, state["awareness"] + effective * .08)
-            state["intention"] = np.clip(state["intention"] + interest * state["trust"] * price_acceptance, 0, 1)
+            if skeptical_model:
+                state["intention"] = np.minimum(state["credibility_acceptance"], np.maximum(0,
+                    state["intention"] + interest * state["trust"] * price_acceptance * state["credibility_acceptance"]))
+            else:
+                state["intention"] = np.clip(state["intention"] + interest * state["trust"] * price_acceptance, 0, 1)
             clicks = eligible & (_stream(seed, ids, day, key + ":click") < np.minimum(.95, click_rate * effective * (.4 + state["need_fit"])))
             paid_clicks = clicks & (_stream(seed, ids, day, key + ":paid-click") <
                                    paid_counts / np.maximum(counts, 1))
@@ -424,13 +561,34 @@ def simulate_scenario(product: ProductSpec, audience: AudienceSpec, plan: MediaP
                          (_stream(seed, ids, day, key + ":creator-post") < .15 + .25 * state["need_fit"])) if is_short else np.zeros(n, dtype=bool)
                 adopted = (engaged & ~state["trend_adopted"][cidx] &
                            (_stream(seed, ids, day, key + ":trend") < (.03 + .08 * state["need_fit"]) * social)) if is_short else np.zeros(n, dtype=bool)
+                skeptical = np.zeros(n, dtype=bool)
+                if skeptical_model:
+                    skeptical = comments & (_stream(seed, ids, day, key + ":comment-skepticism") < state["scam_suspicion"])
+                    recommendation = (~skeptical) & (_stream(seed, ids, day, key + ":credible-recommendation") < state["credibility_acceptance"])
+                    shares &= recommendation
+                    posts &= recommendation
+                    adopted &= recommendation
+                positive = comments & ~skeptical
                 state["trend_adopted"][cidx] |= adopted
                 commented_today |= comments
+                skeptical_today |= skeptical
                 shared_today |= shares
-                state["intention"] = np.minimum(1, state["intention"] +
-                                                (.015 * comments + .025 * adopted) * price_acceptance)
+                if skeptical_model:
+                    social_gain = (.015 * positive + .025 * adopted) * price_acceptance * state["credibility_acceptance"]
+                    if switching_model:
+                        social_gain *= state["switching_acceptance"]
+                    state["intention"] = np.minimum(state["credibility_acceptance"], np.maximum(0,
+                        state["intention"] + social_gain -
+                        .02 * skeptical * (1 - .5 * gullibility)))
+                elif switching_model:
+                    state["intention"] = np.minimum(1, state["intention"] +
+                        (.015 * comments + .025 * adopted) * price_acceptance * state["switching_acceptance"])
+                else:
+                    state["intention"] = np.minimum(1, state["intention"] +
+                                                    (.015 * comments + .025 * adopted) * price_acceptance)
                 for metric, values in (("comments", comments), ("shares", shares), ("creator_posts", posts),
-                                       ("trend_adoptions", adopted)):
+                                       ("trend_adoptions", adopted), ("skeptical_comments", skeptical),
+                                       ("positive_comments", positive)):
                     amount = int(values.sum())
                     row[metric] += amount
                     social_daily[metric] += amount
@@ -442,10 +600,20 @@ def simulate_scenario(product: ProductSpec, audience: AudienceSpec, plan: MediaP
                     row["social_edges"].extend(edges[:max(0, 64 - len(row["social_edges"]))])
         # Need-driven discovery exists without any campaign and is paired across scenarios.
         organic_interest = .014 * state["need_fit"] * state["trust"] * price_acceptance
-        state["intention"] = np.minimum(1, state["intention"] + organic_interest)
+        if switching_model:
+            organic_interest *= state["switching_acceptance"]
+        if skeptical_model:
+            state["intention"] = np.minimum(state["credibility_acceptance"],
+                state["intention"] + organic_interest * state["credibility_acceptance"])
+        else:
+            state["intention"] = np.minimum(1, state["intention"] + organic_interest)
         purchase_probability = (.0015 * state["need_fit"] * state["trust"] * price_acceptance +
                                 .12 * state["intention"] ** 1.7 * state["need_fit"] * price_acceptance)
         purchase_probability *= np.exp(-state["fatigue"] * .45)
+        if skeptical_model:
+            purchase_probability *= state["credibility_acceptance"]
+        if switching_model:
+            purchase_probability *= state["switching_acceptance"]
         candidates = np.flatnonzero((~state["purchased"]) & (_stream(seed, ids, day, "purchase") < purchase_probability))
         priority = _stream(seed, candidates, day, "purchase-priority")
         candidates = candidates[np.argsort(priority, kind="stable")]
@@ -477,6 +645,7 @@ def simulate_scenario(product: ProductSpec, audience: AudienceSpec, plan: MediaP
             if not bought:
                 continue
             row = channel_totals[placement.channel]
+            state["purchase_channel"][buyers[attribution[buyers] == j]] = CHANNELS.index(placement.channel)
             row["units"] += bought
             row["click_attributed_units"] += int(np.count_nonzero((attribution[buyers] == j) & recent_click[buyers]))
             row["view_attributed_units"] += int(np.count_nonzero((attribution[buyers] == j) & ~recent_click[buyers]))
@@ -504,6 +673,8 @@ def simulate_scenario(product: ProductSpec, audience: AudienceSpec, plan: MediaP
                  "cumulative_units": totals["units"], "cumulative_revenue_cents": totals["revenue_cents"],
                  "cumulative_spend_cents": totals["spend_cents"],
                  "mean_intention": float(state["intention"].mean()), "mean_fatigue": float(state["fatigue"].mean()),
+                 "mean_scam_suspicion": float(state["scam_suspicion"].mean()),
+                 "mean_credibility_acceptance": float(state["credibility_acceptance"].mean()),
                  "pending_liability_cents": totals["pending_liability_cents"],
                  "available_media_cents": free_media_cash(),
                  **{key: totals[key] - before_liabilities[key] for key in before_liabilities},
@@ -514,7 +685,8 @@ def simulate_scenario(product: ProductSpec, audience: AudienceSpec, plan: MediaP
             j = int(attribution[i])
             traces.append({"persona_id": f"persona-{i:06d}", "day": day, "exposures": int(observed[i]),
                            "attention_remaining": int(attention[i]), "aware": bool(state["awareness"][i] > 0),
-                           "interest": float(state["awareness"][i] * state["need_fit"][i]),
+                           "interest": float(state["awareness"][i] * state["need_fit"][i] *
+                                             (state["credibility_acceptance"][i] if skeptical_model else 1)),
                            "question": bool(questions[i]), "clicked": bool(clicked_today[i]),
                            "intention": float(state["intention"][i]), "fatigue": float(state["fatigue"][i]),
                            "purchased_today": int(i) in bought_set, "has_purchased": bool(state["purchased"][i]),
@@ -523,7 +695,12 @@ def simulate_scenario(product: ProductSpec, audience: AudienceSpec, plan: MediaP
                            "attribution_rule": "last_click_7d" if recent_click[i] else "last_view_24h" if recent_view[i] else "organic",
                            "shared": bool(shared_today[i]),
                            "creator_role": bool(state["creator_role"][i]),
-                           "synthetic_comment": f"Synthetic comment: how does {product.name} fit my needs?" if commented_today[i] else None,
+                           "scam_suspicion": float(state["scam_suspicion"][i]),
+                           "credibility_acceptance": float(state["credibility_acceptance"][i]),
+                           "comment_sentiment": "skeptical" if skeptical_today[i] else "positive" if commented_today[i] else None,
+                           "synthetic_comment": ("Synthetic skeptical comment: what independent evidence supports this promise?"
+                                                 if skeptical_today[i] else f"Synthetic comment: how does {product.name} fit my needs?"
+                                                 if commented_today[i] else None),
                            "status": "simulated"})
         if plan.adaptive and day < days:
             for j, placement in enumerate(placements):
@@ -542,7 +719,8 @@ def simulate_scenario(product: ProductSpec, audience: AudienceSpec, plan: MediaP
         if checkpoint:
             _save_checkpoint(checkpoint, fingerprint, state, reached,
                              {"day": day, "history": history, "traces": traces, "adjustments": adjustments,
-                              "totals": totals, "frequencies": frequencies, "channel_totals": channel_totals})
+                              "totals": totals, "frequencies": frequencies, "channel_totals": channel_totals},
+                             cancel_check=cancel_check)
         if on_day:
             on_day(daily.copy())
     rows = []
@@ -559,9 +737,18 @@ def simulate_scenario(product: ProductSpec, audience: AudienceSpec, plan: MediaP
     assert totals["spend_cents"] + totals["pending_liability_cents"] <= plan.media_budget_cents
     assert totals["reserved_liability_cents"] - totals["released_liability_cents"] - totals["settled_liability_cents"] == totals["pending_liability_cents"]
     assert totals["units"] == sum(r["units"] for r in rows) + totals["organic_units"]
+    age_segments = _age_segments(state, reached, audience, plan.price_cents, channel_totals)
+    assert sum(row["population"] for row in age_segments) == n
+    assert sum(row["units"] for row in age_segments) == totals["units"]
     return {"engine_version": ENGINE_VERSION, "plan_id": plan.id, "seed": seed,
             "price_cents": plan.price_cents, "population": n, "state_count": n, **totals,
             "unique_buyers": totals["units"],
+            "product_credibility": {**assessment, "numeric_policy": CREDIBILITY_POLICY},
+            "mean_scam_suspicion": float(state["scam_suspicion"].mean()),
+            "mean_credibility_acceptance": float(state["credibility_acceptance"].mean()),
+            "skeptical_comments": sum(row["skeptical_comments"] for row in rows),
+            "positive_comments": sum(row["positive_comments"] for row in rows),
+            "age_segments": age_segments, "market_switching": _market_switching(state, objective, market),
             "contribution_cents": totals["revenue_cents"] - product.variable_cost_cents * totals["units"] - totals["spend_cents"],
             "committed_contribution_cents": totals["revenue_cents"] - product.variable_cost_cents * totals["units"] - totals["spend_cents"] - totals["pending_liability_cents"],
             "daily": history, "channels": rows, "traces": traces, "adjustments": adjustments,
@@ -572,7 +759,7 @@ def simulate_scenario(product: ProductSpec, audience: AudienceSpec, plan: MediaP
 
 def compare_strategies(spec: StudySpec, plans: list[MediaPlan], *, research: TrendReport | None = None,
                        on_progress: Callable | None = None, checkpoint_dir=None,
-                       cancel_check: Callable | None = None) -> dict:
+                       cancel_check: Callable | None = None, credibility_overrides: dict | None = None) -> dict:
     if len(plans) != 3 or len({p.id for p in plans}) != 3:
         raise ValueError("Exactly three plans with unique ids are required")
     if any(p.media_budget_cents != spec.media_budget_cents for p in plans):
@@ -580,6 +767,7 @@ def compare_strategies(spec: StudySpec, plans: list[MediaPlan], *, research: Tre
     base_ids = {f"baseline-{p.price_cents}" for p in plans}
     if any(p.id in base_ids for p in plans):
         raise ValueError("Candidate ids must not collide with price baseline ids")
+    assessment = assess_product_credibility(spec.product, research=research, overrides=credibility_overrides)
     baselines = [MediaPlan(id=f"baseline-{price}", name=f"No campaign / {price / 100:.2f}",
                           price_cents=price, media_budget_cents=0, placements=[], adaptive=False)
                  for price in sorted({p.price_cents for p in plans})]
@@ -592,7 +780,8 @@ def compare_strategies(spec: StudySpec, plans: list[MediaPlan], *, research: Tre
     completed = 0
     checkpoint_root = Path(checkpoint_dir) if checkpoint_dir is not None else None
     # Cache keys include every numerical input and engine version. No stale cross-study reuse.
-    study_key = _digest({"engine": ENGINE_VERSION, "spec": spec.model_dump(), "plans": [p.model_dump() for p in plans]})
+    study_key = _digest({"engine": ENGINE_VERSION, "spec": spec.model_dump(), "plans": [p.model_dump() for p in plans],
+                         "product_credibility": assessment})
     cache = checkpoint_root / study_key if checkpoint_root else None
 
     def emit(message, day=0, scenario="", percent=None):
@@ -616,9 +805,10 @@ def compare_strategies(spec: StudySpec, plans: list[MediaPlan], *, research: Tre
             result = simulate_scenario(spec.product, spec.audience, plan, spec.rounds, seed,
                 research=research, fatigue_multiplier=spec.fatigue_multiplier, price_elasticity=spec.price_elasticity,
                 on_day=on_day, checkpoint_path=checkpoint, cancel_check=cancel_check,
-                response_multipliers=spec.response_multipliers)
+                response_multipliers=spec.response_multipliers, credibility_overrides=credibility_overrides,
+                objective=spec.objective, market=spec.market)
             if result_file:
-                _atomic_json(result_file, result)
+                _atomic_json(result_file, result, cancel_check=cancel_check)
                 checkpoint.unlink(missing_ok=True)
         completed += 1
         emit(f"Committed {phase} replica", spec.rounds, plan.id)
@@ -658,7 +848,11 @@ def compare_strategies(spec: StudySpec, plans: list[MediaPlan], *, research: Tre
               "personas": [p.model_dump() for p in generate_personas(spec.product, spec.audience, research, spec.seed)],
               "scenarios": validation, "comparisons": comparisons,
               "metadata": {"exploration_seeds": exploration_seeds, "validation_seeds": validation_seeds,
+                           "product_credibility": {**assessment, "numeric_policy": CREDIBILITY_POLICY},
                            "objective": "maximum_total_revenue", "practical_threshold_fraction": .01,
+                            "study_objective": spec.objective, "market_assumptions": spec.market.model_dump(),
+                            "market_switching_policy": {"enabled": spec.objective == "market_discovery",
+                                                        "assumptions": SWITCHING_ASSUMPTIONS.copy()},
                            "selected_revenue_validation": revenue_validation,
                            "exploration_selected_id": selected_id,
                            "original_plans": [p.model_dump() for p in plans],
@@ -683,5 +877,8 @@ def compare_strategies(spec: StudySpec, plans: list[MediaPlan], *, research: Tre
                            "cache_retention": "All completed replica results retained through cancellation and completion; no active-run eviction. Input limits bound a comparison to600replicas. Cleanup must be explicit after terminal completion.",
                            "random_streams": "Seed + numerical agent id + day + mechanism; no mutable draw cursor.",
                            "uncertainty": "5th–95th replica quantiles and approximate normal 95% paired mean intervals; conditional assumptions only."}}
+    if spec.objective == "market_discovery":
+        from .market_analysis import build_market_analysis
+        report["market_analysis"] = build_market_analysis(spec, research, report)
     emit("Comparison complete", spec.rounds, "", 100)
     return report

@@ -75,6 +75,7 @@ class EvidenceSource(Contract):
     retrieved_at: str = Field(default_factory=utc_now)
     published_at: str | None = None
     content_hash: str = ""
+    url_reference_hash: str = Field(default="", pattern=r"^(?:[0-9a-f]{64})?$")
 
 
 class Finding(Contract):
@@ -110,6 +111,7 @@ class Persona(Contract):
     budget_cents: int = Field(ge=0)
     need_fit: float = Field(ge=0, le=1)
     trust: float = Field(ge=0, le=1)
+    skepticism: float = Field(default=0.5, ge=0, le=1)
     price_sensitivity: float = Field(ge=0, le=1)
     social_sensitivity: float = Field(ge=0, le=1)
     fatigue_tolerance: float = Field(ge=0, le=1)
@@ -168,8 +170,18 @@ class MediaPlan(Contract):
         return self
 
 
+class MarketAssumptions(Contract):
+    incumbent_share: float = Field(default=0.6, ge=0, le=1, allow_inf_nan=False)
+    switching_friction: float = Field(default=0.5, ge=0, le=1, allow_inf_nan=False)
+    addressable_population: int | None = Field(default=None, ge=1, le=1_000_000_000_000)
+    product_url: str = Field(default="", max_length=4096)
+    competitor_urls: list[Annotated[str, Field(max_length=4096)]] = Field(default_factory=list, max_length=10)
+
+
 class StudySpec(Contract):
     product: ProductSpec
+    objective: Literal["campaign", "market_discovery"] = "campaign"
+    market: MarketAssumptions = Field(default_factory=MarketAssumptions)
     audience: AudienceSpec = Field(default_factory=AudienceSpec)
     research: ResearchRequest = Field(default_factory=ResearchRequest)
     rounds: int = Field(default=30, ge=1, le=90)

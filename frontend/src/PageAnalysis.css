@@ -8,7 +8,7 @@
   margin: 0 0 25px;
   font-size: 0.875rem;
   font-weight: 600;
-  color: #40547d;
+  color: #626262;
   flex-wrap: wrap;
 }
 .page-phase-line > span:not(.chip) {
@@ -167,7 +167,7 @@
   border: 0;
 }
 .page-job progress::-webkit-progress-bar {
-  background: #e7ecf6;
+  background: #eeeeee;
 }
 .page-job progress::-webkit-progress-value {
   background: var(--blue);
@@ -194,18 +194,18 @@
   min-height: 36px;
   white-space: nowrap;
   font-size: 0.75rem;
-  background: #f3f5fa;
+  background: #f6f6f6;
   border: 1px solid transparent;
   border-radius: 6px;
   padding: 8px 11px;
 }
 .page-snapshot-tabs > button:hover {
-  background: #edf1ff;
+  background: #fff3ec;
 }
 .page-snapshot-tabs > button.selected {
-  background: #eaf0ff;
+  background: #fff3ec;
   color: var(--blue);
-  border-color: #adbef9;
+  border-color: #fff3ec;
   font-weight: 600;
 }
 .page-evidence-content {
@@ -217,7 +217,7 @@
 }
 .page-image-wrap {
   position: relative;
-  background: #e8edf5;
+  background: #eeeeee;
   overflow: hidden;
   border-radius: 5px;
   min-height: 100px;
@@ -229,7 +229,7 @@
 }
 .page-region {
   position: absolute;
-  border: 1px solid #214cfa;
+  border: 1px solid #b8350b;
   background: transparent;
   min-width: 8px;
   min-height: 8px;
@@ -239,8 +239,8 @@
 }
 .page-region:hover,
 .page-region.selected {
-  background: #214cfa18;
-  border: 2px solid #214cfa;
+  background: #b8350b18;
+  border: 2px solid #b8350b;
 }
 .page-region > span {
   position: absolute;
@@ -319,8 +319,8 @@
 .page-region-description blockquote {
   margin: 17px 0;
   padding: 15px;
-  background: #f1f5ff;
-  color: #263d7d;
+  background: #fff3ec;
+  color: #626262;
   font-size: 0.9375rem;
   line-height: 1.8;
   border-radius: 7px;
@@ -349,7 +349,7 @@
   margin-top: 27px;
 }
 .page-cost-cap {
-  background: #eef3ff;
+  background: #fff3ec;
   border-radius: 8px;
   padding: 16px 19px;
   display: flex;
@@ -358,7 +358,7 @@
 }
 .page-cost-cap > span {
   font-size: 0.8125rem;
-  color: #43577e;
+  color: #626262;
 }
 .page-cost-cap strong {
   font-size: 1.25rem;
@@ -367,7 +367,7 @@
 .page-cost-cap small {
   font-size: 0.75rem;
   line-height: 1.8;
-  color: #43577e;
+  color: #626262;
 }
 .page-remote-consent {
   background: #fff4e3;
@@ -466,7 +466,7 @@
   justify-content: space-between;
   gap: 20px;
   flex-wrap: wrap;
-  background: #f5f7fc;
+  background: #f9f9f9;
   padding: 17px;
   border-radius: 8px;
   margin: 19px 0 10px;
@@ -501,7 +501,7 @@
   display: grid;
   grid-template-columns: minmax(130px, 1fr) 3fr;
   gap: 20px;
-  border-top: 1px solid #e9edf4;
+  border-top: 1px solid #eeeeee;
   padding: 13px 0;
   font-size: 0.8125rem;
 }

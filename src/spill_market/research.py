@@ -28,6 +28,7 @@ from pydantic import BaseModel, ConfigDict, Field
 import warnings
 
 from .gateway import BudgetExceeded, BudgetLedger, SemanticClient, bounded_post_json, positive_env_rate
+from .evidence_urls import public_evidence_url, url_reference_hash
 from .models import EvidenceSource, Finding, ProductSpec, ResearchRequest, TrendReport, utc_now
 
 MAX_BYTES = 2_000_000
@@ -315,15 +316,7 @@ def _published(value) -> str | None:
 
 def _provenance_url(url: str) -> str:
     """Export a source location without URL credentials, query tokens or fragments."""
-    try:
-        parsed = urlsplit(url)
-        host = parsed.hostname or ""
-        if ":" in host:
-            host = "[" + host + "]"
-        netloc = host + (f":{parsed.port}" if parsed.port else "")
-        return urlunsplit((parsed.scheme, netloc, parsed.path, "", ""))
-    except (ValueError, TypeError):
-        return "[invalid URL]"
+    return public_evidence_url(url) or "[invalid URL]"
 
 
 def _source(title, content, kind, *, url=None, published_at=None) -> EvidenceSource | None:
@@ -338,6 +331,7 @@ def _source(title, content, kind, *, url=None, published_at=None) -> EvidenceSou
         title = _provenance_url(title)
     return EvidenceSource(id="ev_" + identity, title=clean_text(title)[:300] or "Untitled source",
                           url=_provenance_url(url) if url else None,
+                          url_reference_hash=url_reference_hash(url),
                           content=text, kind=kind, published_at=_published(published_at), content_hash=content_hash)
 
 
@@ -693,7 +687,10 @@ async def run_research(request: ResearchRequest, product: ProductSpec, *, ledger
                 else:
                     unpaid_fetch_attempts += 1
                     final_url, text, content_type = await fetcher.fetch(url)
-                    sources.extend(_parse_document(final_url, text, content_type, request.max_sources - len(sources)))
+                    collected = _parse_document(final_url, text, content_type, request.max_sources - len(sources))
+                    for source in collected:
+                        source.url_reference_hash = url_reference_hash(url)
+                    sources.extend(collected)
             except BudgetExceeded:
                 raise
             except (ValueError, OSError, httpx.HTTPError, TimeoutError, ElementTree.ParseError) as exc:

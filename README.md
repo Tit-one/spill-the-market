@@ -2,9 +2,9 @@
 
 **Give your product launch a dry run.** Explore a market, build a synthetic audience, edit three launch strategies and see which assumptions change the outcome.
 
-[Guide français](docs/README-FR.md) · [Methodology](docs/METHODOLOGY.md) · [Architecture](docs/ARCHITECTURE.md) · [Visual page module](docs/PAGE-ANALYSIS.md)
+[Guide français](docs/README-FR.md) · [Market study](docs/MARKET-STUDY.md) · [Methodology](docs/METHODOLOGY.md) · [Architecture](docs/ARCHITECTURE.md) · [Visual page module](docs/PAGE-ANALYSIS.md)
 
-![Spill the Market launch notebook](docs/assets/launch-notebook.png)
+![Spill the Market product brief](docs/assets/launch-notebook.png)
 
 ## Try it locally
 
@@ -16,7 +16,7 @@ cd spill-the-market
 uv run spill-market serve --open
 ```
 
-Open **http://127.0.0.1:8765**. Choose the fictional game or creative-software example, prepare the brief, edit the media plans, and run. Both demos work without an API key. On Windows, `Lancer Spill the Market.cmd` starts the same application.
+Open **http://127.0.0.1:8765**. Choose a **known-target campaign** or **market exploration**, describe the product, set its price and virtual advertising budget, then launch. One action prepares three product-adapted strategies and starts the simulation. Advanced settings and fictional examples remain available. Offline simulations need no API key. On Windows, `Lancer Spill the Market.cmd` starts the same application.
 
 For automatic desktop/mobile page captures, install Chromium once: `uv run python -m playwright install chromium` (Linux may need `--with-deps`). Importing screenshots works without a browser installation.
 
@@ -35,6 +35,22 @@ spill-market serve --open
 2. **Audience.** Choose an inclusive adult age range, population and representative count. Inspect fictional profiles and their source-linked beliefs. Individual purchasing budgets are synthetic model assumptions. Age suggestions require confirmation; weak age-related behavior priors are editable assumptions, including a neutral setting.
 3. **Media plans.** Compare three editable combinations of price, channel, creative, delivery hours and frequency under the same virtual advertising envelope. Lock individual lines. Product-specific proposals cover fifteen channel families, including in-game placements.
 4. **Simulation and report.** Follow attention, watch completion, comments, sharing, trend adoption, fatigue, questions and first purchases over daily rounds. Compare against price-matched no-campaign controls, with separate exploration and validation seeds. Export JSON, CSV, standalone HTML or Markdown.
+
+The interface opens with a neutral product brief; fictional examples load only when selected. Results lead with a named scenario's verdict, units, virtual revenue, media spend and CAC, followed by the three campaign comparisons. Undefined CAC and inconclusive comparisons stay explicit; detailed traces are available on demand.
+
+### Guided market exploration
+
+Exploration compares adult age bands over **every numerical individual**, with validation dispersion and channel attribution. It combines conditional results with source-linked competitor references, reported pain points, potential barriers and next actions. Supplied public product/competitor pages are fetched as text without paid inference; broader automatic discovery uses the separate explicitly configured and budgeted Tavily action.
+
+The switching model distinguishes existing-solution users, simulated switchers and new-to-category buyers. Switchers are included in total purchases. Incumbent shares and switching friction are editable assumptions, not measured customer bases. Market population remains unknown unless supplied; any projection is labelled an unvalidated extrapolation. Missing evidence, overlapping rates and small samples stay visible. [Workflow and exact limits](docs/MARKET-STUDY.md).
+
+### Credibility and extraordinary promises
+
+The model screens affirmative product promises for unsubstantiated extraordinary claims. This is auditable French/English lexical triage, **not** independent scientific verification or a factual fraud verdict. Marketing wording and retrieved snippets do not verify a promise; an ordinary result only means no matching extraordinary claim was detected.
+
+The current numeric11 kernel varies skepticism within every age group. For flagged claims, additional credibility acceptance affects paid, natural and social intention gains and both purchase hazards. Repetition cannot remove the cap; skeptical comments do not act as positive recommendations. Scores and response factors are unvalidated modelling hypotheses. [Policy, assumptions and limits](docs/METHODOLOGY.md).
+
+Checkpoint and final-report writes use unique atomic staging and bounded Windows sharing retries. A permanent failure preserves the previous committed checkpoint so the calculation can be resumed. Saved reports from the earlier unassessed model remain clearly identified.
 
 ### Different channels, different mechanics
 

@@ -11,6 +11,12 @@ import psutil
 
 from .models import MediaPlan, StudySpec, TrendReport, utc_now
 from .storage import Store
+from .atomic_io import AtomicWriteCancelled, atomic_write
+
+
+def commit_run_report(path: Path, report: dict, *, cancel_check=None):
+    encoded = json.dumps(report, ensure_ascii=False, allow_nan=False).encode("utf-8")
+    atomic_write(path, lambda stream: stream.write(encoded), description="simulation report", cancel_check=cancel_check)
 
 
 def execute_run(data_dir: str | Path, run_id: str) -> dict:
@@ -68,16 +74,11 @@ def execute_run(data_dir: str | Path, run_id: str) -> dict:
             cost = {"currency": "USD", "limit_usd": spec.api_budget_usd, "calls": 0,
                     "confirmed_usd": 0, "reserved_usd": 0, "uncertain_usd": 0, "committed_usd": 0}
         report["metadata"]["real_api_cost"] = {**cost, "scope": "study_cumulative"}
-        temporary = directory / "report.json.tmp"
-        with temporary.open("w", encoding="utf-8") as output:
-            json.dump(report, output, ensure_ascii=False, allow_nan=False)
-            output.flush()
-            os.fsync(output.fileno())
-        temporary.replace(directory / "report.json")
+        commit_run_report(directory / "report.json", report, cancel_check=lambda: store.is_cancel_requested(run_id))
         store.update_run(run_id, status="completed", report_path=str(directory / "report.json"),
                          progress={"percent": 100, "message": "Experiment completed", "day": spec.rounds})
         return report
-    except SimulationCancelled:
+    except (SimulationCancelled, AtomicWriteCancelled):
         store.update_run(run_id, status="cancelled", error=None)
         return {}
     except Exception as exc:

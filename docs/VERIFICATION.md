@@ -2,7 +2,24 @@
 
 Evidence is separated by scope. Local and simulated checks are not presented as physical-device, live-provider or real-market qualification.
 
-## v0.2 page-module evidence
+## Current numeric11 guided-market evidence
+
+- Fresh full Windows/CPython3.11 suite: **308Python tests passed in80.06s**; Ruff passed. Frontend: **46tests**, TypeScript/Vite and Prettier passed. New coverage includes defaulted old-study contracts, full-population age/money/attribution reconciliation, switching subsets/zero-friction/all acquisition routes and exact resume.
+- Guided launch tests cover no-source preparation, free supplied URLs, failed-source preservation, paid-flag rejection before creation, unchanged explicit source language and idempotent market-research query identity. Nineteen market-analysis/guided tests were independently run during final rereview.
+- Source identity review fixed own-product-as-competitor errors and query-ID collisions, separates opaque requested references from redacted display links, and preserves redirects. Common query credentials are absent from exported source objects. HTML/Markdown retain standalone sources and finding IDs. Rankings compare the top interval with every alternative, and remain inconclusive for sparse/tied/overlapping results.
+- Actual Chromium guided campaign1000people×30days and market60people×3days reached100% with no source URLs or provider calls. Ready desktop/mobile home and market report were visually inspected; the home launch action fits at y861 in1440×900. Installed package identity and terminal cross-platform CI are recorded in the final release notes, independently of the archived checks below.
+- Current100000-person campaign-mode capacity:12cold complete replicas,36million agent-days in136.810s with120.66MiB processRSS and0APIcalls. [Scope and historical workloads](BENCHMARKS.md).
+
+## Earlier v0.2 redesign, skepticism and recovery evidence
+
+- Fresh Windows/CPython3.11 suite: **267Python tests passed in66.65s**, one upstream Starlette/httpx warning; Ruff (`src tests scripts`) passed. Frontend: **36tests**, TypeScript/Vite and Prettier passed. Actual Chromium desktop1440×900/mobile390×844 covered neutral entry, zero/positive/legacy reports and progressive page analysis with no overflow or browser console errors. The primary report KPIs fit in the first desktop viewport.
+- A real user run failed at99.806% during NPZ replacement on Windows. Its database/checkpoint were preserved,119replica results reused, and the same run reached100% under numeric9 without provider calls. Subsequent files use unique atomic staging, flush/fsync/close and bounded replacement retry; a real Windows handle opened without FILE_SHARE_DELETE was released during the regression and the commit recovered. Permanent failures retain the previous committed file. Final reports use the same primitive.
+- Claim-context review found and fixed negation false positives and unrelated fiction/criticism bypasses.60claim regressions passed; root independently checked8context probes after the final tiny comparison fix. No further material issue was found in the scoped numeric/atomic review. Ordinary numeric9 projection hashes remain identical in two Windows fixtures; cross-platform comparisons keep structure, discrete counts and cents exact, with1e-12 tolerance for continuous floats. Four high-frequency/zero-fatigue stress routes and perception-state resume equality exercise unsupported claims.
+- Current numeric10 capacity test:100000individuals,30days,3candidates+3controls,1+1seed,12cold complete replicas,36millionagent-days in129.296s with117.31MiB peak processRSS and0APIcalls. This is deliberately distinct from the archived numeric9/120-replica measurements. [Current and historical benchmark scopes](BENCHMARKS.md).
+- Original saved inputs/reports remain available. New zero-sale output is not presented as a measured market conclusion or a factual scam verdict. Legacy reports are labelled when claim credibility was not assessed. Current wheel/CI identity and final release artifacts are recorded in the release notes.
+- Final installed wheel SHA256: `2aa3b5a97a0aa7affdfe2ec3ad460f2abeeef9bf59cf2ea4b215586163393e13`. **40/40 installed checks passed** with36runtime files matching the archive. Actual installed workers completed the numeric/page smoke without a separate Node runtime; capture and analysis were cancelled/resumed with committed work reused. An installed synthetic ordinary-vs-extraordinary baseline probe independently checked the acquisition suppression. These offline package checks made no provider calls.
+
+## Initial v0.2 page-module evidence (before redesign)
 
 The page module is qualified separately from the unchanged numeric9 engine. Fresh Windows/CPython3.11 verification: **189 Python tests passed in61.34s**, Ruff (`src tests scripts`) passed. **24 frontend tests**, TypeScript/Vite and Prettier passed. Desktop/mobile screenshots and controlled HTTP transports are distinguished from live-model/account checks below.
 

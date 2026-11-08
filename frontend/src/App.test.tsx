@@ -10,7 +10,7 @@ import {
 import App from "./App";
 import { api } from "./api";
 import { initialSpec } from "./utils";
-import type { Bootstrap, Study, Run, MediaPlan } from "./types";
+import type { Bootstrap, Study, Run, MediaPlan, StudySpec } from "./types";
 
 vi.mock("./api", () => ({ api: vi.fn(), setToken: vi.fn() }));
 function deferred<T>() {
@@ -112,6 +112,246 @@ const nav = (label: string) =>
   screen.getByRole("button", { name: new RegExp(`^${label}`) });
 
 describe("notebook lifecycle regressions", () => {
+  async function fillQuickProduct() {
+    await screen.findByRole("combobox", { name: "Saved experiments" });
+    fireEvent.change(screen.getByRole("textbox", { name: "Product name" }), {
+      target: { value: "A real product" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: /What does it do/ }), {
+      target: {
+        value:
+          "An everyday product with a clear benefit and stated requirements.",
+      },
+    });
+    fireEvent.change(
+      screen.getByRole("spinbutton", {
+        name: "Selling price (EUR)",
+      }),
+      { target: { value: "49" } },
+    );
+  }
+  const queued: Run = {
+    id: "quick-run",
+    study_id: "quick-study",
+    status: "queued",
+    progress: { percent: 0, message: "Queued direct launch" },
+  };
+  it("launches a known-audience campaign once and adopts its run and history without a manual preparation step", async () => {
+    const pending = deferred<{ study: Study; run: Run }>();
+    const base = handler;
+    handler = async (path, method, body) =>
+      path === "/studies/launch" && method === "POST"
+        ? pending.promise
+        : base(path, method, body);
+    render(<App />);
+    await fillQuickProduct();
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Minimum age" }), {
+      target: { value: "25" },
+    });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Maximum age" }), {
+      target: { value: "45" },
+    });
+    fireEvent.click(screen.getByRole("radio", { name: /Find my market/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /I know my audience/ }));
+    const button = screen.getByRole("button", {
+      name: "Launch my campaign",
+    });
+    fireEvent.click(button);
+    fireEvent.submit(button.closest("form")!);
+    expect(
+      vi.mocked(api).mock.calls.filter(([path]) => path === "/studies/launch"),
+    ).toHaveLength(1);
+    expect(
+      screen
+        .getByRole("textbox", { name: "Product name" })
+        .matches(":disabled"),
+    ).toBe(true);
+    const body = vi
+      .mocked(api)
+      .mock.calls.find(([path]) => path === "/studies/launch")![2] as {
+      spec: StudySpec;
+    };
+    expect(body.spec.objective).toBe("campaign");
+    expect(body.spec.use_representative_llm).toBe(false);
+    expect([body.spec.audience.age_min, body.spec.audience.age_max]).toEqual([
+      25, 45,
+    ]);
+    const launched = {
+      ...study("quick-study", "A real product"),
+      spec: body.spec,
+      runs: [queued],
+    };
+    pending.resolve({ study: launched, run: queued });
+    await screen.findByText(/Queued direct launch/);
+    expect(screen.getByRole("heading", { name: "Saved runs" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /quick-ru/ })).toBeTruthy();
+  });
+  it("explores broad adult ages with optional controlled URLs and no inherited paid research settings", async () => {
+    let sent: StudySpec | undefined;
+    const base = handler;
+    handler = async (path, method, body) => {
+      if (path === "/studies/launch" && method === "POST") {
+        sent = (body as { spec: StudySpec }).spec;
+        return {
+          study: { ...study("quick-study"), spec: sent, runs: [queued] },
+          run: queued,
+        };
+      }
+      return base(path, method, body);
+    };
+    render(<App />);
+    await fillQuickProduct();
+    fireEvent.click(screen.getByRole("radio", { name: /Find my market/ }));
+    expect(
+      screen.queryByRole("spinbutton", { name: "Minimum age" }),
+    ).toBeNull();
+    expect(screen.getByText(/^Exploration across ages 18–75/)).toBeTruthy();
+    fireEvent.click(screen.getByText("Enrich with sources", { exact: true }));
+    fireEvent.change(
+      screen.getByRole("textbox", {
+        name: "Product page URL (optional)",
+      }),
+      { target: { value: "https://example.org/product" } },
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", {
+        name: "Competitor URLs (one per line)",
+      }),
+      { target: { value: "https://example.org/competitor" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Explore my market" }));
+    await screen.findByText(/Queued direct launch/);
+    expect(sent?.objective).toBe("market_discovery");
+    expect([sent?.audience.age_min, sent?.audience.age_max]).toEqual([18, 75]);
+    expect(sent?.audience.region).toBe("France");
+    expect(sent?.research.language).toBe("fr");
+    expect(sent?.research.use_llm).toBe(false);
+    expect(sent?.research.use_firecrawl).toBe(false);
+    expect(sent?.market?.competitor_urls).toEqual([
+      "https://example.org/competitor",
+    ]);
+    expect(sent?.market?.product_url).toBe("https://example.org/product");
+  });
+  it("keeps a successfully launched run when optional source collection returns a warning", async () => {
+    const base = handler;
+    handler = async (path, method, body) =>
+      path === "/studies/launch" && method === "POST"
+        ? {
+            study: { ...study("quick-study"), runs: [queued] },
+            run: queued,
+            research_error: "The supplied source could not be read.",
+          }
+        : base(path, method, body);
+    render(<App />);
+    await fillQuickProduct();
+    fireEvent.click(screen.getByRole("button", { name: "Launch my campaign" }));
+    await screen.findByText(/Queued direct launch/);
+    expect(
+      screen.getByText(/The supplied source could not be read/),
+    ).toBeTruthy();
+    expect(
+      vi.mocked(api).mock.calls.filter(([path]) => path === "/studies/launch"),
+    ).toHaveLength(1);
+  });
+  it("opens an older saved study as a campaign without changing its ages or launching again", async () => {
+    await openA();
+    fireEvent.click(nav("The brief"));
+    expect(
+      (
+        screen.getByRole("radio", {
+          name: /I know my audience/,
+        }) as HTMLInputElement
+      ).checked,
+    ).toBe(true);
+    expect(
+      (
+        screen.getByRole("spinbutton", {
+          name: "Minimum age",
+        }) as HTMLInputElement
+      ).value,
+    ).toBe("18");
+    expect(
+      (
+        screen.getByRole("spinbutton", {
+          name: "Maximum age",
+        }) as HTMLInputElement
+      ).value,
+    ).toBe("65");
+    expect(
+      vi.mocked(api).mock.calls.some(([path]) => path === "/studies/launch"),
+    ).toBe(false);
+  });
+  it("starts with a neutral product and loads a fictional example only after choosing it", async () => {
+    render(<App />);
+    await screen.findByRole("combobox", { name: "Saved experiments" });
+    expect(
+      (
+        screen.getByRole("textbox", {
+          name: "Product name",
+        }) as HTMLInputElement
+      ).value,
+    ).toBe("");
+    expect(
+      (
+        screen.getByRole("textbox", {
+          name: /What does it do/,
+        }) as HTMLTextAreaElement
+      ).value,
+    ).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: /Orbit Orchard/ }));
+    expect(
+      (
+        screen.getByRole("textbox", {
+          name: "Product name",
+        }) as HTMLInputElement
+      ).value,
+    ).toBe("Orbit Orchard");
+  });
+  it("detaches inherited game keywords when an example becomes another product", async () => {
+    render(<App />);
+    await screen.findByRole("combobox", { name: "Saved experiments" });
+    fireEvent.click(screen.getByRole("button", { name: /Orbit Orchard/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Product name" }), {
+      target: { value: "My own physical product" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Product assumptions and advanced settings",
+      }),
+    );
+    expect(
+      (
+        screen.getByRole("textbox", {
+          name: /Keywords used for the audience/,
+        }) as HTMLInputElement
+      ).value,
+    ).toBe("");
+  });
+  it("preserves explicitly edited keywords when an example becomes another product", async () => {
+    render(<App />);
+    await screen.findByRole("combobox", { name: "Saved experiments" });
+    fireEvent.click(screen.getByRole("button", { name: /Orbit Orchard/ }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Product assumptions and advanced settings",
+      }),
+    );
+    const keywords = screen.getByRole("textbox", {
+      name: /Keywords used for the audience/,
+    });
+    fireEvent.change(keywords, { target: { value: "handmade, local" } });
+    fireEvent.blur(keywords);
+    fireEvent.change(screen.getByRole("textbox", { name: "Product name" }), {
+      target: { value: "My own physical product" },
+    });
+    expect(
+      (
+        screen.getByRole("textbox", {
+          name: /Keywords used for the audience/,
+        }) as HTMLInputElement
+      ).value,
+    ).toBe("handmade, local");
+  });
   it("renders the French page-analysis heading with intact accents", async () => {
     await openA();
     fireEvent.click(screen.getByRole("button", { name: "Switch to French" }));
@@ -130,10 +370,17 @@ describe("notebook lifecycle regressions", () => {
         ? pending.promise
         : base(path, method, body);
     render(<App />);
+    await screen.findByRole("combobox", { name: "Saved experiments" });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Product assumptions and advanced settings",
+      }),
+    );
     const prepare = await screen.findByRole("button", {
       name: "Prepare experiment",
     });
     await waitFor(() => expect(prepare.matches(":disabled")).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: /Orbit Orchard/ }));
     fireEvent.click(prepare);
     const example = screen.getByRole("button", { name: /FrameBridge/ });
     expect(example.matches(":disabled")).toBe(true);
@@ -206,6 +453,11 @@ describe("notebook lifecycle regressions", () => {
         );
       }
       if (boundary === "prepare") {
+        fireEvent.click(
+          screen.getByRole("button", {
+            name: "Product assumptions and advanced settings",
+          }),
+        );
         fireEvent.click(
           screen.getByRole("button", { name: "Prepare experiment" }),
         );

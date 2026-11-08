@@ -102,6 +102,9 @@ async def test_vision_uses_images_without_product_or_future_leaks_and_blind_cont
     configured(monkeypatch)
     captured = []
     audit = fixture_audit(tmp_path, provenance="screenshot_import")
+    for index, person in enumerate(audit["study_snapshot"]["personas"]):
+        person["skepticism"] = [0.1, 0.9, 0.7, 0.4][index]
+    skepticism = {person["id"]: person["skepticism"] for person in audit["study_snapshot"]["personas"]}
     ledger = BudgetLedger(tmp_path / "b.db", 1)
     original_factory = VisionClient.from_env
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: provider_response(r, captured))) as transport:
@@ -127,6 +130,12 @@ async def test_vision_uses_images_without_product_or_future_leaks_and_blind_cont
             assert "OBSERVER_TEXT_shot_A_1" not in serialized and "OBSERVER_TEXT_shot_B_1" not in serialized
         if context["task"] == "review":
             assert len(context["personas"]) == 1, "Each model context must contain only its own persona's history"
+            person = context["personas"][0]
+            assert person["skepticism"] == skepticism[person["id"]]
+            instruction = payload["messages"][0]["content"]
+            assert "unverified claims" in instruction
+            assert "currently revealed evidence" in instruction
+            assert "scam" in instruction and "without declaring fraud" in instruction
     valid_ids = {s["id"] for s in audit["snapshots"]} | {region.id for obs in first.observations for region in obs.regions}
     assert all(set(finding["evidence_ids"]) <= valid_ids for finding in first.findings)
 

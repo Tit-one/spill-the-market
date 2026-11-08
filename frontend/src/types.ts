@@ -1,3 +1,4 @@
+import type { MarketAnalysis } from "./marketTypes";
 export type Lang = "en" | "fr";
 export type Category = "game" | "software" | "physical" | "service" | "other";
 export type Channel =
@@ -51,6 +52,14 @@ export interface ResearchRequest {
   use_firecrawl: boolean;
 }
 export interface StudySpec {
+  objective?: "campaign" | "market_discovery";
+  market?: {
+    incumbent_share: number;
+    switching_friction: number;
+    addressable_population: number | null;
+    product_url: string;
+    competitor_urls: string[];
+  };
   product: Product;
   audience: Audience;
   research: ResearchRequest;
@@ -202,6 +211,7 @@ export interface Scenario {
   [key: string]: unknown;
 }
 export interface Report {
+  market_analysis?: MarketAnalysis;
   schema_version: string;
   engine_version: string;
   product: Product;
@@ -239,6 +249,16 @@ export interface Study {
   personas: Persona[];
   created_at: string;
   runs: Run[];
+  product_credibility?: {
+    status: "ordinary" | "needs_evidence" | "extraordinary_unsubstantiated";
+    score: number;
+    scam_suspicion: number;
+    claims: string[];
+    reasons: string[];
+    required_evidence: string[];
+    source: string;
+    version: string;
+  };
 }
 export interface Bootstrap {
   version: string;

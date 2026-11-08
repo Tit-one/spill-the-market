@@ -1,0 +1,31 @@
+{
+  "hardware": {
+    "platform": "Windows-10-10.0.26300-SP0",
+    "python": "3.11.15",
+    "logical_cpus": 16,
+    "ram_gib": 63.7
+  },
+  "results": [
+    {
+      "population": 100000,
+      "days": 30,
+      "candidate_strategies": 3,
+      "price_matched_baselines": 3,
+      "exploration_repetitions": 1,
+      "validation_repetitions": 1,
+      "scenario_replicates": 12,
+      "agent_days": 36000000,
+      "elapsed_seconds": 136.81,
+      "peak_process_rss_mib": 120.66,
+      "checkpoint_and_cache_bytes": 4256337,
+      "external_api_calls": 0,
+      "engine_version": "0.2.0-numeric-11",
+      "numpy_numeric_individuals": true,
+      "daily_checkpoints_enabled": true,
+      "cold_run": true,
+      "preexisting_replica_results": 0,
+      "committed_replica_results": 12,
+      "measurement_directory": "100000-cold-bd0f108801a3"
+    }
+  ]
+}

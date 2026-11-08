@@ -1,4 +1,16 @@
 import type { Lang, StudySpec, Channel, Placement } from "./types";
+export function planName(
+  plan: { id?: string; plan_id?: string; name: string },
+  lang: Lang,
+): string {
+  const defaults: Record<string, [string, string]> = {
+    value: ["Accessible discovery", "Découverte accessible"],
+    balanced: ["Demonstrate the benefit", "Démontrer le bénéfice"],
+    premium: ["Focused premium launch", "Lancement premium ciblé"],
+  };
+  const pair = defaults[plan.plan_id ?? plan.id ?? ""];
+  return lang === "fr" && pair && plan.name === pair[0] ? pair[1] : plan.name;
+}
 export const channels: Channel[] = [
   "tiktok",
   "instagram",
@@ -118,6 +130,22 @@ export function validateSpec(s: StudySpec, lang: Lang): string[] {
     );
   if (s.product.unit_price_cents <= 0)
     e.push(fr ? "Le prix doit être positif." : "Price must be positive.");
+  if (
+    [s.market?.product_url, ...(s.market?.competitor_urls ?? [])].some(
+      (url) => url?.trim() && !safeURL(url.trim()),
+    )
+  )
+    e.push(
+      fr
+        ? "Les sources doivent être des URL publiques commençant par https:// ou http://."
+        : "Source URLs must start with https:// or http://.",
+    );
+  if ((s.market?.competitor_urls.filter((url) => url.trim()).length ?? 0) > 10)
+    e.push(
+      fr
+        ? "Ajoutez au plus 10 URL concurrentes."
+        : "Add at most 10 competitor URLs.",
+    );
   return e;
 }
 export function newPlacement(channel: Channel = "instagram"): Placement {
@@ -185,4 +213,37 @@ export const initialSpec: StudySpec = {
   fatigue_multiplier: 1,
   price_elasticity: 1,
   locale: "en",
+};
+
+/** New experiments have no inherited fictional product, keywords or research. */
+export const blankStudySpec: StudySpec = {
+  ...initialSpec,
+  objective: "campaign",
+  market: {
+    incumbent_share: 0.6,
+    switching_friction: 0.5,
+    addressable_population: null,
+    product_url: "",
+    competitor_urls: [],
+  },
+  audience: { ...initialSpec.audience, languages: ["fr"] },
+  product: {
+    ...initialSpec.product,
+    name: "",
+    description: "",
+    category: "other",
+    unit_price_cents: 0,
+    variable_cost_cents: 0,
+    keywords: [],
+    prerequisites: [],
+    stock: null,
+  },
+  research: {
+    ...initialSpec.research,
+    mode: "offline",
+    language: "fr",
+    topic: "",
+    documents: [],
+    urls: [],
+  },
 };

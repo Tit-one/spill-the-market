@@ -1,8 +1,8 @@
-/* THESIS: A working launch notebook; the brief and experiment spine lead, rather than metric cards.
- * OWN-WORLD: Bright experiment blue, dark ink, white worksheets, system sans and tabular data.
- * STORY: Describe a product, inspect evidence and people, edit three strategies, then run and compare.
- * FIRST VIEWPORT: Labelled blue rail, editable brief worksheet, compact timeline and reproducibility notes.
- * FORM: User-approved notebook direction; native controls, ordered workflow, quiet analytical results. */
+/* THESIS: Product input first; a report that answers what happened before exposing diagnostics.
+ * OWN-WORLD: White, black and orange; horizontal masthead, restrained input console, system sans.
+ * STORY: Describe a real product, set assumptions, compare three strategies, read the verdict and totals.
+ * FIRST VIEWPORT: A quiet workflow column beside one focused product brief; one explicit primary action.
+ * FORM: User-pinned MiroFish reference, independently implemented; no reference code or assets copied. */
 import {
   useState,
   useEffect,
@@ -60,12 +60,14 @@ import type {
 } from "./types";
 import { api, setToken } from "./api";
 import PageAnalysis from "./PageAnalysis";
+import ResultOverview, { CredibilityNotice } from "./ResultOverview";
+import MarketOverview from "./MarketOverview";
 import { WorkspaceRequests } from "./workspaceRequests";
 import type { OperationTicket } from "./workspaceRequests";
 import {
   channels,
   channelNames,
-  initialSpec,
+  blankStudySpec,
   money,
   number,
   percent,
@@ -73,6 +75,7 @@ import {
   safeURL,
   newPlacement,
   validateSpec,
+  planName,
 } from "./utils";
 
 type Tab =
@@ -91,7 +94,8 @@ const useCopy = () => {
 };
 const activeStatus = (s: string) =>
   ["queued", "running", "cancelling", "resuming"].includes(s);
-const resumableStatus = (s: string) => ["cancelled", "interrupted"].includes(s);
+const resumableStatus = (s: string) =>
+  ["cancelled", "interrupted", "failed"].includes(s);
 function Field({
   label,
   hint,
@@ -204,7 +208,11 @@ export default function App() {
     [lang],
   );
   const [pageBusy, setPageBusy] = useState(false);
-  const initialized = useRef(false);
+  const exampleOrigin = useRef<{
+    spec: StudySpec;
+    keywordsTouched: boolean;
+    prerequisitesTouched: boolean;
+  } | null>(null);
   const requests = useRef(new WorkspaceRequests());
   const selectedStudyId = useRef<string | null>(null);
   const selectedRunId = useRef<string | null>(null);
@@ -213,8 +221,12 @@ export default function App() {
     [bootLoading, setBootLoading] = useState(true),
     [error, setError] = useState(""),
     [message, setMessage] = useState("");
+  const [launchWarning, setLaunchWarning] = useState<{
+    runId: string;
+    text: string;
+  } | null>(null);
   const [tab, setTab] = useState<Tab>("brief"),
-    [spec, setSpec] = useState<StudySpec>(structuredClone(initialSpec)),
+    [spec, setSpec] = useState<StudySpec>(structuredClone(blankStudySpec)),
     [study, setStudy] = useState<Study | null>(null),
     [studies, setStudies] = useState<Study[]>([]),
     [plans, setPlans] = useState<MediaPlan[]>([]),
@@ -223,7 +235,7 @@ export default function App() {
     [dirty, setDirty] = useState(false),
     [planDirty, setPlanDirty] = useState(false);
   const [researchRequest, setResearchRequest] = useState<ResearchRequest>(
-    structuredClone(initialSpec.research),
+    structuredClone(blankStudySpec.research),
   );
   const [cost, setCost] = useState<{
     studyId: string;
@@ -255,11 +267,7 @@ export default function App() {
       if (generation !== bootstrapGeneration.current) return;
       setToken(b.session_token);
       setBoot(b);
-      if (b.examples[0] && !initialized.current) {
-        initialized.current = true;
-        setSpec({ ...b.examples[0].spec, locale: lang });
-        setResearchRequest(b.examples[0].spec.research);
-      }
+
       const saved = await api<{ studies: Study[] }>("/studies");
       if (generation === bootstrapGeneration.current)
         setStudies(saved.studies ?? []);
@@ -284,6 +292,20 @@ export default function App() {
     document.documentElement.lang = lang;
     localStorage.setItem("spill-language", lang);
   }, [lang]);
+  useEffect(() => {
+    const revealActiveStep = () => {
+      const nav = document.querySelector<HTMLElement>(".rail nav");
+      const active = nav?.querySelector<HTMLElement>(".active");
+      if (nav && active)
+        nav.scrollLeft =
+          active.offsetLeft -
+          nav.offsetLeft -
+          (nav.clientWidth - active.clientWidth) / 2;
+    };
+    revealActiveStep();
+    window.addEventListener("resize", revealActiveStep);
+    return () => window.removeEventListener("resize", revealActiveStep);
+  }, [tab]);
   // Run history is study-owned. Poll responses may never update a newly selected notebook/run.
   useEffect(() => {
     if (!run || !activeStatus(run.status)) return;
@@ -353,6 +375,59 @@ export default function App() {
   }, [run?.id, run?.status, t]);
   const editSpec = (next: StudySpec) => {
     if (requests.current.pending || pageBusy) return;
+    const inherited = exampleOrigin.current;
+    if (inherited) {
+      inherited.keywordsTouched ||=
+        next.product.keywords !== spec.product.keywords;
+      inherited.prerequisitesTouched ||=
+        next.product.prerequisites !== spec.product.prerequisites;
+      const original = inherited.spec.product;
+      if (
+        next.product.name !== original.name ||
+        next.product.description !== original.description ||
+        next.product.category !== original.category
+      ) {
+        next = {
+          ...next,
+          product: {
+            ...next.product,
+            keywords:
+              !inherited.keywordsTouched &&
+              JSON.stringify(next.product.keywords) ===
+                JSON.stringify(original.keywords)
+                ? []
+                : next.product.keywords,
+            prerequisites:
+              !inherited.prerequisitesTouched &&
+              JSON.stringify(next.product.prerequisites) ===
+                JSON.stringify(original.prerequisites)
+                ? []
+                : next.product.prerequisites,
+          },
+        };
+        if (researchRequest.mode === "demo") {
+          const offline = {
+            ...researchRequest,
+            mode: "offline" as const,
+            topic: "",
+            documents: [],
+            urls: [],
+            use_llm: false,
+            use_firecrawl: false,
+          };
+          next = { ...next, research: offline };
+          setResearchRequest(offline);
+        }
+        exampleOrigin.current = null;
+        notify(
+          t(
+            "Inherited example inputs were detached. Your edited keywords were kept.",
+            "Les données héritées de l’exemple ont été détachées. Vos mots-clés modifiés sont conservés.",
+          ),
+        );
+      }
+    }
+    if (next.research !== spec.research) setResearchRequest(next.research);
     setSpec(next);
     setDirty(!!study);
   };
@@ -360,10 +435,16 @@ export default function App() {
     if (requests.current.pending || bootLoading || pageBusy) return;
     const example = boot?.examples.find((value) => value.id === id);
     if (!example) return;
+    exampleOrigin.current = {
+      spec: structuredClone(example.spec),
+      keywordsTouched: false,
+      prerequisitesTouched: false,
+    };
     requests.current.invalidate();
     selectedStudyId.current = null;
     setCost(null);
     setMessage("");
+    setLaunchWarning(null);
     setSpec({ ...structuredClone(example.spec), locale: lang });
     setResearchRequest(structuredClone(example.spec.research));
     setStudy(null);
@@ -376,7 +457,7 @@ export default function App() {
     notify(
       t(
         `Loaded fictional example: ${example.name}.`,
-        `Exemple fictif chargé : ${example.name}.`,
+        `Charger un exemple (facultatif) chargé : ${example.name}.`,
       ),
     );
   };
@@ -425,6 +506,74 @@ export default function App() {
     if (goToMedia) setTab("media");
     return next;
   };
+  const launchExperiment = () =>
+    void act("launch", async (ticket) => {
+      const submitted: StudySpec = {
+        ...structuredClone(spec),
+        objective: spec.objective ?? "campaign",
+        use_representative_llm: false,
+        locale: lang,
+        audience: { ...spec.audience, auto_age: false },
+        research: {
+          ...spec.research,
+          mode: spec.research.mode === "demo" ? "demo" : "offline",
+          use_llm: false,
+          use_firecrawl: false,
+        },
+        market: {
+          ...{
+            incumbent_share: 0.6,
+            switching_friction: 0.5,
+            addressable_population: null,
+            product_url: "",
+            competitor_urls: [],
+          },
+          ...spec.market,
+          product_url: spec.market?.product_url.trim() ?? "",
+          competitor_urls: (spec.market?.competitor_urls ?? [])
+            .map((url) => url.trim())
+            .filter(Boolean),
+        },
+      };
+      const errors = validateSpec(submitted, lang);
+      if (errors.length) throw new Error(errors.join(" "));
+      const response = await api<{
+        study: Study;
+        run: Run;
+        research_error?: string;
+      }>("/studies/launch", "POST", { spec: submitted });
+      if (!ticket.current()) return;
+      if (response.study.id !== response.run.study_id)
+        throw new Error(
+          t(
+            "The server returned inconsistent experiment identifiers.",
+            "Le serveur a renvoyé des identifiants incohérents.",
+          ),
+        );
+      const canonical = {
+        ...response.study,
+        runs: [
+          response.run,
+          ...(response.study.runs ?? []).filter(
+            (saved) => saved.id !== response.run.id,
+          ),
+        ],
+      };
+      setCost(null);
+      adoptStudy(canonical);
+      setSpec(canonical.spec);
+      setResearchRequest(canonical.spec.research);
+      setPlans(canonical.plans);
+      chooseRun(response.run);
+      setDirty(false);
+      setPlanDirty(false);
+      setLaunchWarning(
+        response.research_error
+          ? { runId: response.run.id, text: response.research_error }
+          : null,
+      );
+      setTab("results");
+    });
   const openStudy = (id: string) =>
     void act("open", async (ticket) => {
       const next = await api<Study>(`/studies/${id}`);
@@ -433,6 +582,24 @@ export default function App() {
       if (!ticket.current()) return;
       setCost(null);
       setMessage("");
+      setLaunchWarning(null);
+      const origin = boot?.examples.find(
+        (e) =>
+          e.spec.product.name === next.spec.product.name &&
+          e.spec.product.description === next.spec.product.description &&
+          e.spec.product.category === next.spec.product.category,
+      );
+      exampleOrigin.current = origin
+        ? {
+            spec: structuredClone(origin.spec),
+            keywordsTouched:
+              JSON.stringify(next.spec.product.keywords) !==
+              JSON.stringify(origin.spec.product.keywords),
+            prerequisitesTouched:
+              JSON.stringify(next.spec.product.prerequisites) !==
+              JSON.stringify(origin.spec.product.prerequisites),
+          }
+        : null;
       adoptStudy(next);
       setSpec(next.spec);
       setResearchRequest(next.spec.research);
@@ -641,10 +808,7 @@ export default function App() {
         <div className="workspace">
           <header className="topbar">
             <span className="workspace-label">
-              {t(
-                "Make your assumptions visible.",
-                "Rendez vos hypothèses visibles.",
-              )}
+              {t("Local simulation workspace", "Espace local de simulation")}
             </span>
             <div className="top-actions">
               <span className="simulation-label">
@@ -702,17 +866,19 @@ export default function App() {
                   {message}
                 </div>
               )}
-              <div className="page-heading">
+              <div
+                className={`page-heading ${tab === "brief" ? "launch-heading" : ""}`}
+              >
                 <div>
                   <p className="page-kicker">
-                    {t(
-                      "A SMALL TEST. A CLEARER NEXT MOVE.",
-                      "UN PETIT TEST. UNE SUITE PLUS CLAIRE.",
-                    )}
+                    {t("MARKET SIMULATION", "SIMULATION DE MARCHÉ")}
                   </p>
                   <h1>
                     {tab === "brief"
-                      ? t("Before you go all in.", "Avant de vous lancer.")
+                      ? t(
+                          "Prepare your product launch.",
+                          "Préparez votre lancement.",
+                        )
                       : tab === "research"
                         ? t(
                             "Keep the evidence close.",
@@ -734,10 +900,7 @@ export default function App() {
                                   "Que se passe-t-il après le clic ?",
                                 )
                               : tab === "results"
-                                ? t(
-                                    "Read the experiment.",
-                                    "Lisez l’expérience.",
-                                  )
+                                ? spec.product.name || t("Results", "Résultats")
                                 : tab === "settings"
                                   ? t(
                                       "Your local workspace.",
@@ -751,8 +914,8 @@ export default function App() {
                   <p className="page-description">
                     {tab === "brief"
                       ? t(
-                          "Give your idea a dry run. Shape the audience, compare launch strategies, and see what your assumptions change.",
-                          "Testez votre idée à blanc. Définissez le public, comparez les stratégies et voyez ce que vos hypothèses changent.",
+                          "Describe the product, choose an audience and compare three launch strategies.",
+                          "Décrivez votre produit, choisissez votre public et comparez trois stratégies de lancement.",
                         )
                       : tab === "media"
                         ? t(
@@ -765,10 +928,7 @@ export default function App() {
                               "Capturez localement, examinez les éléments visibles, puis suivez vos personas dans la page.",
                             )
                           : tab === "results"
-                            ? t(
-                                "Virtual purchases, real arithmetic. These outcomes are conditional on your inputs.",
-                                "Des achats virtuels, de vrais calculs. Ces résultats dépendent de vos paramètres.",
-                              )
+                            ? `${number(run?.report?.population ?? spec.audience.population, lang)} ${t("people", "personnes")} · ${spec.audience.age_min}–${spec.audience.age_max} ${t("years", "ans")} · ${run?.report?.rounds ?? spec.rounds} ${t("days", "jours")} · ${t("Virtual simulation", "Simulation virtuelle")}`
                             : tab === "research"
                               ? t(
                                   "Separate sourced observations, interpretations, and assumptions before you simulate.",
@@ -789,23 +949,133 @@ export default function App() {
                   </span>
                 )}
               </div>
+              {launchWarning &&
+                launchWarning.runId === run?.id &&
+                tab === "results" && (
+                  <div
+                    className="notice warning launch-source-warning"
+                    role="status"
+                  >
+                    <strong>
+                      {t(
+                        "Simulation launched with incomplete sources.",
+                        "Simulation lancée avec des sources incomplètes.",
+                      )}
+                    </strong>
+                    <p>{launchWarning.text}</p>
+                  </div>
+                )}
               {tab === "brief" && (
                 <div className="brief-layout">
                   <section className="worksheet">
                     <div className="sheet-header">
                       <h2>
-                        {t(
-                          "Start with the product",
-                          "Commençons par le produit",
-                        )}
+                        {t("Describe your product", "Décrivez votre produit")}
                       </h2>
                       <span className="chip">
                         {t("Editable brief", "Brief modifiable")}
                       </span>
                     </div>
+                    <BriefForm
+                      spec={spec}
+                      onChange={editSpec}
+                      onLaunch={launchExperiment}
+                      busy={busyAll}
+                      llmConfigured={!!boot?.provider_status.llm}
+                      onPrepare={() =>
+                        void act("prepare", async (ticket) => {
+                          await prepare(ticket);
+                          notify(
+                            t(
+                              "Your audience and three media plans are ready.",
+                              "Votre public et vos trois plans média sont prêts.",
+                            ),
+                          );
+                        })
+                      }
+                      dirty={dirty}
+                    />
+                  </section>
+                  <aside className="experiment-aside">
+                    <div className="experiment-note">
+                      <div className="note-top">
+                        <Flask size={24} />
+                        <span>{t("HOW IT WORKS", "LE PARCOURS")}</span>
+                      </div>
+                      <h2>
+                        {t(
+                          "From your product to a clear report.",
+                          "De votre produit à un rapport clair.",
+                        )}
+                      </h2>
+                      <p>
+                        {t(
+                          "Know what each step produces.",
+                          "Comprenez le résultat de chaque étape.",
+                        )}
+                      </p>
+                      <dl>
+                        <div>
+                          <dt>
+                            {t("Virtual media budget", "Budget média virtuel")}
+                          </dt>
+                          <dd>
+                            {money(
+                              spec.media_budget_cents,
+                              spec.product.currency,
+                              lang,
+                              true,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>{t("Population", "Population")}</dt>
+                          <dd>
+                            {number(spec.audience.population, lang)} ·{" "}
+                            {spec.audience.age_min}–{spec.audience.age_max}{" "}
+                            {t("years", "ans")}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>{t("Simulation days", "Jours simulés")}</dt>
+                          <dd>{number(spec.rounds, lang)}</dd>
+                        </div>
+                        <div>
+                          <dt>{t("Real API cap", "Plafond API réel")}</dt>
+                          <dd>
+                            {money(spec.api_budget_usd * 100, "USD", lang)}
+                          </dd>
+                        </div>
+                      </dl>
+                      <div className="experiment-timeline">
+                        {[
+                          t("Describe the product", "Décrire le produit"),
+                          t("Choose your objective", "Choisir l’objectif"),
+                          t(
+                            "Compare three strategies",
+                            "Comparer trois stratégies",
+                          ),
+                        ].map((v, i) => (
+                          <div key={v}>
+                            <span>{i + 1}</span>
+                            <p>{v}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <p className="aside-caption">
+                      <Info size={17} />
+                      {t(
+                        "A thinking tool, not a sales forecast. Synthetic behaviour cannot establish real demand.",
+                        "Un outil de réflexion, pas une prévision de ventes. Un comportement synthétique ne prouve pas la demande réelle.",
+                      )}
+                    </p>
                     <div className="example-strip">
                       <span>
-                        {t("Try a fictional example", "Exemple fictif")}
+                        {t(
+                          "Load an example (optional)",
+                          "Charger un exemple (facultatif)",
+                        )}
                       </span>
                       {boot?.examples.map((ex) => (
                         <button
@@ -833,97 +1103,6 @@ export default function App() {
                         />
                       )}
                     </div>
-                    <BriefForm
-                      spec={spec}
-                      onChange={editSpec}
-                      busy={busyAll}
-                      llmConfigured={!!boot?.provider_status.llm}
-                      onPrepare={() =>
-                        void act("prepare", async (ticket) => {
-                          await prepare(ticket);
-                          notify(
-                            t(
-                              "Your audience and three media plans are ready.",
-                              "Votre public et vos trois plans média sont prêts.",
-                            ),
-                          );
-                        })
-                      }
-                      dirty={dirty}
-                    />
-                  </section>
-                  <aside className="experiment-aside">
-                    <div className="experiment-note">
-                      <div className="note-top">
-                        <Flask size={24} />
-                        <span>{t("THE EXPERIMENT", "L’EXPÉRIENCE")}</span>
-                      </div>
-                      <h2>{spec.product.name}</h2>
-                      <p>
-                        {t(
-                          "A launch you can rewind.",
-                          "Un lancement que l’on peut rejouer.",
-                        )}
-                      </p>
-                      <dl>
-                        <div>
-                          <dt>
-                            {t("Virtual media budget", "Budget média virtuel")}
-                          </dt>
-                          <dd>
-                            {money(
-                              spec.media_budget_cents,
-                              spec.product.currency,
-                              lang,
-                              true,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>{t("Population", "Population")}</dt>
-                          <dd>{number(spec.audience.population, lang)}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("Simulation days", "Jours simulés")}</dt>
-                          <dd>{number(spec.rounds, lang)}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("Real API cap", "Plafond API réel")}</dt>
-                          <dd>
-                            {money(spec.api_budget_usd * 100, "USD", lang)}
-                          </dd>
-                        </div>
-                      </dl>
-                      <div className="experiment-timeline">
-                        {[
-                          t("Gather evidence", "Rassembler les sources"),
-                          t(
-                            "Build a diverse audience",
-                            "Former un public diversifié",
-                          ),
-                          t(
-                            "Compare three strategies",
-                            "Comparer trois stratégies",
-                          ),
-                          t(
-                            "Follow virtual purchases",
-                            "Suivre les achats virtuels",
-                          ),
-                        ].map((v, i) => (
-                          <div key={v}>
-                            <span>{i + 1}</span>
-                            <p>{v}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <p className="aside-caption">
-                      <Info size={17} />
-                      {t(
-                        "A thinking tool, not a sales forecast. Synthetic behaviour cannot establish real demand.",
-                        "Un outil de réflexion, pas une prévision de ventes. Un comportement synthétique ne prouve pas la demande réelle.",
-                      )}
-                    </p>
                     {studies.length > 0 && (
                       <div className="history">
                         <h3>{t("Reopen a notebook", "Rouvrir un carnet")}</h3>
@@ -945,7 +1124,10 @@ export default function App() {
                           {studies.map((s) => (
                             <option key={s.id} value={s.id}>
                               {s.spec.product.name} ·{" "}
-                              {new Date(s.created_at).toLocaleDateString(lang)}
+                              {new Date(s.created_at).toLocaleString(lang, {
+                                dateStyle: "short",
+                                timeStyle: "short",
+                              })}
                             </option>
                           ))}
                         </select>
@@ -1021,6 +1203,12 @@ export default function App() {
               {tab === "media" &&
                 (study ? (
                   <>
+                    {study.product_credibility && (
+                      <CredibilityNotice
+                        value={study.product_credibility}
+                        lang={lang}
+                      />
+                    )}
                     <div className="study-toolbar">
                       <div>
                         <strong>{study.spec.product.name}</strong>
@@ -1122,15 +1310,30 @@ export default function App() {
                 <>
                   {run ? (
                     <>
-                      <RunMonitor
-                        run={run}
-                        busy={busyAll}
-                        onCancel={() => runAction("cancel")}
-                        onResume={() => runAction("resume")}
-                        onRefresh={refreshRun}
-                      />
+                      {run.status !== "completed" && (
+                        <details
+                          className="run-monitor-disclosure"
+                          open={run.status !== "completed"}
+                        >
+                          <summary>
+                            {t("Run status and recovery", "Suivi et reprise")} ·{" "}
+                            {statusLabel(run.status, t)}
+                          </summary>
+                          <RunMonitor
+                            run={run}
+                            busy={busyAll}
+                            onCancel={() => runAction("cancel")}
+                            onResume={() => runAction("resume")}
+                            onRefresh={refreshRun}
+                          />
+                        </details>
+                      )}
                       {run.report ? (
-                        <Results report={run.report} runId={run.id} />
+                        <Results
+                          key={run.id}
+                          report={run.report}
+                          runId={run.id}
+                        />
                       ) : (
                         !activeStatus(run.status) && (
                           <Empty
@@ -1146,13 +1349,35 @@ export default function App() {
                                   )
                             }
                           >
-                            {run.error ??
-                              t(
-                                "Resume an interrupted run from its saved state, or review the media plans and start another.",
-                                "Reprenez une exécution interrompue depuis son état sauvegardé, ou revoyez les plans média pour en lancer une nouvelle.",
-                              )}
+                            {run.status === "failed"
+                              ? t(
+                                  "Your experiment is saved. Use Resume checkpoint above to continue; technical details are available in the run status.",
+                                  "Votre expérience est enregistrée. Utilisez Reprendre le calcul ci-dessus ; les détails techniques sont accessibles dans le suivi.",
+                                )
+                              : t(
+                                  "Resume an interrupted run from its saved state, or review the media plans and start another.",
+                                  "Reprenez une exécution interrompue depuis son état sauvegardé, ou revoyez les plans média pour en lancer une nouvelle.",
+                                )}
                           </Empty>
                         )
+                      )}
+                      {run.status === "completed" && (
+                        <details
+                          className="run-monitor-disclosure"
+                          open={run.status !== "completed"}
+                        >
+                          <summary>
+                            {t("Run status and recovery", "Suivi et reprise")} ·{" "}
+                            {statusLabel(run.status, t)}
+                          </summary>
+                          <RunMonitor
+                            run={run}
+                            busy={busyAll}
+                            onCancel={() => runAction("cancel")}
+                            onResume={() => runAction("resume")}
+                            onRefresh={refreshRun}
+                          />
+                        </details>
                       )}
                     </>
                   ) : (
@@ -1230,6 +1455,7 @@ function BriefForm({
   onChange,
   busy,
   onPrepare,
+  onLaunch,
   dirty,
   llmConfigured,
 }: {
@@ -1237,19 +1463,61 @@ function BriefForm({
   onChange: (s: StudySpec) => void;
   busy: boolean;
   onPrepare: () => void;
+  onLaunch: () => void;
   dirty: boolean;
   llmConfigured: boolean;
 }) {
   const t = useCopy(),
     lang = useContext(Language);
   const [advanced, setAdvanced] = useState(false);
+  const discovery = s.objective === "market_discovery";
+  const market = {
+    incumbent_share: 0.6,
+    switching_friction: 0.5,
+    addressable_population: null,
+    product_url: "",
+    competitor_urls: [] as string[],
+    ...s.market,
+  };
+  const knownAges = useRef({
+    min: discovery ? 18 : s.audience.age_min,
+    max: discovery ? 65 : s.audience.age_max,
+  });
+  const changeMode = (objective: "campaign" | "market_discovery") => {
+    if (objective === (s.objective ?? "campaign")) return;
+    if (objective === "market_discovery")
+      knownAges.current = { min: s.audience.age_min, max: s.audience.age_max };
+    onChange({
+      ...s,
+      objective,
+      market,
+      audience: {
+        ...s.audience,
+        age_min: objective === "market_discovery" ? 18 : knownAges.current.min,
+        age_max: objective === "market_discovery" ? 75 : knownAges.current.max,
+        auto_age: false,
+      },
+      research: {
+        ...s.research,
+        language: objective === "market_discovery" ? "fr" : s.research.language,
+        use_llm: false,
+        use_firecrawl: false,
+        mode: s.research.mode === "demo" ? "offline" : s.research.mode,
+        ...(s.research.mode === "demo"
+          ? { topic: "", documents: [], urls: [] }
+          : {}),
+      },
+    });
+  };
+  const m = (changes: Partial<typeof market>) =>
+    onChange({ ...s, market: { ...market, ...changes } });
   const p = (changes: Partial<StudySpec["product"]>) =>
       onChange({ ...s, product: { ...s.product, ...changes } }),
     a = (changes: Partial<StudySpec["audience"]>) =>
       onChange({ ...s, audience: { ...s.audience, ...changes } });
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    onPrepare();
+    onLaunch();
   };
   return (
     <form onSubmit={submit} className="brief-form">
@@ -1260,6 +1528,57 @@ function BriefForm({
             "Paramètres du produit et de l’expérience",
           )}
         </legend>
+        <fieldset className="launch-modes">
+          <legend>
+            {t("What do you want to learn?", "Que voulez-vous savoir ?")}
+          </legend>
+          <label
+            className={!discovery ? "mode-choice selected" : "mode-choice"}
+          >
+            <input
+              type="radio"
+              name="launch-objective"
+              checked={!discovery}
+              onChange={() => changeMode("campaign")}
+            />
+            <span>
+              <strong>
+                {t("I know my audience", "Je connais mon public")}
+              </strong>
+              <small>
+                {t(
+                  "Compare three campaigns for this target.",
+                  "Comparer trois campagnes sur cette cible.",
+                )}
+              </small>
+            </span>
+          </label>
+          <label className={discovery ? "mode-choice selected" : "mode-choice"}>
+            <input
+              type="radio"
+              name="launch-objective"
+              checked={discovery}
+              onChange={() => changeMode("market_discovery")}
+            />
+            <span>
+              <strong>{t("Find my market", "Trouver mon marché")}</strong>
+              <small>
+                {t(
+                  "Explore ages, channels and switching barriers.",
+                  "Explorer les âges, canaux et freins au changement.",
+                )}
+              </small>
+            </span>
+          </label>
+        </fieldset>
+        {discovery && (
+          <p className="launch-discovery-note">
+            {t(
+              `Exploration across ages ${s.audience.age_min}–${s.audience.age_max}. No target is selected in advance; conclusions remain simulation hypotheses.`,
+              `Exploration de ${s.audience.age_min}–${s.audience.age_max} ans. Aucune cible présélectionnée ; les conclusions restent des hypothèses de simulation.`,
+            )}
+          </p>
+        )}
         <div className="form-grid">
           <Field label={t("Product name", "Nom du produit")}>
             <input
@@ -1307,7 +1626,11 @@ function BriefForm({
               required
               minLength={8}
               maxLength={12000}
-              rows={4}
+              rows={2}
+              placeholder={t(
+                "What is your product? What does it promise, who needs it, and what must the buyer know?",
+                "Quel est votre produit ? Que promet-il, à qui répond-il et que doit savoir l’acheteur ?",
+              )}
               value={s.product.description}
               onChange={(e) => p({ description: e.target.value })}
             />
@@ -1316,43 +1639,15 @@ function BriefForm({
             label={
               t("Selling price", "Prix de vente") + ` (${s.product.currency})`
             }
-            value={s.product.unit_price_cents / 100}
+            value={
+              s.product.unit_price_cents
+                ? s.product.unit_price_cents / 100
+                : NaN
+            }
             onChange={(v) => p({ unit_price_cents: Math.round(v * 100) })}
             min={0.01}
             max={1000000}
             step={0.01}
-          />
-          <NumberField
-            label={
-              t("Variable cost / purchase", "Coût variable / achat") +
-              ` (${s.product.currency})`
-            }
-            value={s.product.variable_cost_cents / 100}
-            onChange={(v) => p({ variable_cost_cents: Math.round(v * 100) })}
-            max={1000000}
-            step={0.01}
-          />
-        </div>
-        <div className="form-section-heading">
-          <span>02</span>
-          <h3>{t("Define the experiment", "Définissez l’expérience")}</h3>
-        </div>
-        <div className="form-grid">
-          <NumberField
-            label={t("Numerical population", "Population numérique")}
-            value={s.audience.population}
-            onChange={(v) =>
-              a({
-                population: v,
-                representatives: Math.min(v, s.audience.representatives),
-              })
-            }
-            min={30}
-            max={100000}
-            hint={t(
-              "30–100,000 individual states. Profiles below are only representatives.",
-              "30 à 100 000 états individuels. Les profils sont des représentants.",
-            )}
           />
           <NumberField
             label={
@@ -1370,80 +1665,205 @@ function BriefForm({
               "Total par proposition. Aucune dépense publicitaire réelle.",
             )}
           />
-          <div className="field">
-            <span>{t("Strict age range", "Tranche d’âge stricte")}</span>
-            <div className="age-range">
-              <label>
-                <span className="sr-only">
-                  {t("Minimum age", "Âge minimum")}
-                </span>
-                <input
-                  required
-                  type="number"
-                  min={18}
-                  max={s.audience.age_max}
-                  value={s.audience.age_min}
-                  onChange={(e) =>
-                    a({ age_min: Number(e.target.value), auto_age: false })
-                  }
-                />
-              </label>
-              <span>–</span>
-              <label>
-                <span className="sr-only">
-                  {t("Maximum age", "Âge maximum")}
-                </span>
-                <input
-                  required
-                  type="number"
-                  min={s.audience.age_min}
-                  max={100}
-                  value={s.audience.age_max}
-                  onChange={(e) =>
-                    a({ age_max: Number(e.target.value), auto_age: false })
-                  }
-                />
-              </label>
-              <span>{t("years", "ans")}</span>
-            </div>
-            <small>
-              {t(
-                "Adults only. No inferred age change without your confirmation.",
-                "Adultes uniquement. Aucun changement d’âge suggéré sans confirmation.",
-              )}
-            </small>
-          </div>
-          <NumberField
-            label={t("Simulation days", "Jours simulés")}
-            value={s.rounds}
-            onChange={(v) => onChange({ ...s, rounds: v })}
-            min={1}
-            max={90}
-            hint={t(
-              "1 day = 1 round. Up to 90 days.",
-              "1 jour = 1 tour. Jusqu’à 90 jours.",
-            )}
-          />
-          <Field label={t("Region", "Région")}>
-            <input
-              required
-              maxLength={100}
-              value={s.audience.region}
-              onChange={(e) => a({ region: e.target.value })}
-            />
-          </Field>
-          <NumberField
-            label={t("Representative profiles", "Profils représentatifs")}
-            value={s.audience.representatives}
-            onChange={(v) => a({ representatives: v })}
-            min={1}
-            max={Math.min(200, s.audience.population)}
-            hint={t(
-              "Bounded, synthetic profiles for inspection.",
-              "Profils synthétiques limités, pour inspection.",
-            )}
-          />
+          {!discovery && (
+            <>
+              {" "}
+              <div className="field span-2 launch-age">
+                <span>{t("Strict age range", "Tranche d’âge stricte")}</span>
+                <div className="age-range">
+                  <label>
+                    <span className="sr-only">
+                      {t("Minimum age", "Âge minimum")}
+                    </span>
+                    <input
+                      required
+                      type="number"
+                      min={18}
+                      max={s.audience.age_max}
+                      value={s.audience.age_min}
+                      onChange={(e) =>
+                        a({ age_min: Number(e.target.value), auto_age: false })
+                      }
+                    />
+                  </label>
+                  <span>–</span>
+                  <label>
+                    <span className="sr-only">
+                      {t("Maximum age", "Âge maximum")}
+                    </span>
+                    <input
+                      required
+                      type="number"
+                      min={s.audience.age_min}
+                      max={100}
+                      value={s.audience.age_max}
+                      onChange={(e) =>
+                        a({ age_max: Number(e.target.value), auto_age: false })
+                      }
+                    />
+                  </label>
+                  <span>{t("years", "ans")}</span>
+                </div>
+                <small>
+                  {t(
+                    "Adults only. No inferred age change without your confirmation.",
+                    "Adultes uniquement. Aucun changement d’âge suggéré sans confirmation.",
+                  )}
+                </small>
+              </div>
+            </>
+          )}
         </div>
+        <div className="form-submit">
+          <p>
+            {dirty
+              ? t(
+                  "Launching creates a new experiment. Your saved study is kept.",
+                  "Le lancement crée une nouvelle expérience. Le carnet enregistré est conservé.",
+                )
+              : t(
+                  "Three strategies are created and simulated automatically.",
+                  "Trois stratégies sont créées et simulées automatiquement.",
+                )}{" "}
+            <span>
+              {number(s.audience.population, lang)} {t("people", "personnes")} ·{" "}
+              {s.rounds} {t("days", "jours")} ·{" "}
+              {t("Real API cap", "Plafond API réel")}{" "}
+              {money(s.api_budget_usd * 100, "USD", lang)}
+            </span>
+          </p>
+          <button className="button" type="submit" disabled={busy}>
+            {busy ? <SpinnerGap className="spin" /> : <Flask />}
+            {busy
+              ? t("Launching…", "Lancement…")
+              : discovery
+                ? t("Explore my market", "Explorer mon marché")
+                : t("Launch my campaign", "Lancer ma campagne")}
+            <ArrowRight size={18} />
+          </button>
+        </div>
+        <details className="launch-sources">
+          <summary>
+            {t("Enrich with sources", "Enrichir avec des sources")}
+          </summary>
+          <p>
+            {t(
+              "Optional. Only supplied public pages are read, with no paid search or AI. Without a URL, the simulation uses stated assumptions.",
+              "Facultatif. Seules les pages publiques fournies sont lues, sans recherche payante ni IA. Sans URL, la simulation utilise des hypothèses explicites.",
+            )}
+          </p>
+          <div className="form-grid">
+            <Field
+              label={t(
+                "Product page URL (optional)",
+                "URL du produit (facultative)",
+              )}
+            >
+              <input
+                type="url"
+                maxLength={4096}
+                value={market.product_url}
+                onChange={(e) => m({ product_url: e.target.value })}
+                placeholder="https://"
+              />
+            </Field>
+            <Field label={t("Region", "Région")}>
+              <input
+                required
+                maxLength={100}
+                value={s.audience.region}
+                onChange={(e) => a({ region: e.target.value })}
+              />
+            </Field>
+            <Field
+              className="span-2"
+              label={t(
+                "Competitor URLs (one per line)",
+                "URL des concurrents (une par ligne)",
+              )}
+            >
+              <textarea
+                rows={2}
+                maxLength={40960}
+                value={market.competitor_urls.join("\n")}
+                onChange={(e) =>
+                  m({ competitor_urls: e.target.value.split("\n") })
+                }
+              />
+            </Field>
+            <Field label={t("Source language", "Langue des sources")}>
+              <select
+                value={s.research.language}
+                onChange={(e) =>
+                  onChange({
+                    ...s,
+                    research: { ...s.research, language: e.target.value },
+                  })
+                }
+              >
+                <option value="fr">Français</option>
+                <option value="en">English</option>
+              </select>
+            </Field>
+          </div>
+        </details>
+        <details className="brief-experiment-options">
+          <summary>
+            <span>
+              {t("Experiment settings", "Paramètres de l’expérience")}
+            </span>
+            <small>
+              {number(s.audience.population, lang)} {t("people", "personnes")} ·{" "}
+              {s.audience.age_min}–{s.audience.age_max} {t("years", "ans")} ·{" "}
+              {s.rounds} {t("days", "jours")} ·{" "}
+              {money(s.media_budget_cents, s.product.currency, lang, true)}
+            </small>
+          </summary>
+          <div className="form-section-heading">
+            <span>02</span>
+            <h3>{t("Define the experiment", "Définissez l’expérience")}</h3>
+          </div>
+          <div className="form-grid">
+            <NumberField
+              label={t("Numerical population", "Population numérique")}
+              value={s.audience.population}
+              onChange={(v) =>
+                a({
+                  population: v,
+                  representatives: Math.min(v, s.audience.representatives),
+                })
+              }
+              min={30}
+              max={100000}
+              hint={t(
+                "30–100,000 individual states. Profiles below are only representatives.",
+                "30 à 100 000 états individuels. Les profils sont des représentants.",
+              )}
+            />
+            <NumberField
+              label={t("Simulation days", "Jours simulés")}
+              value={s.rounds}
+              onChange={(v) => onChange({ ...s, rounds: v })}
+              min={1}
+              max={90}
+              hint={t(
+                "1 day = 1 round. Up to 90 days.",
+                "1 jour = 1 tour. Jusqu’à 90 jours.",
+              )}
+            />
+            <NumberField
+              label={t("Representative profiles", "Profils représentatifs")}
+              value={s.audience.representatives}
+              onChange={(v) => a({ representatives: v })}
+              min={1}
+              max={Math.min(200, s.audience.population)}
+              hint={t(
+                "Bounded, synthetic profiles for inspection.",
+                "Profils synthétiques limités, pour inspection.",
+              )}
+            />
+          </div>
+        </details>
         <button
           type="button"
           className="disclosure"
@@ -1452,12 +1872,48 @@ function BriefForm({
         >
           {advanced ? <CaretUp /> : <CaretDown />}
           {t(
-            "Reproducibility, cost cap & advanced inputs",
-            "Reproductibilité, plafond réel et réglages avancés",
+            "Product assumptions and advanced settings",
+            "Hypothèses produit et réglages avancés",
           )}
         </button>
         {advanced && (
           <div className="advanced-fields form-grid">
+            {" "}
+            <NumberField
+              label={
+                t("Variable cost / purchase", "Coût variable / achat") +
+                ` (${s.product.currency})`
+              }
+              value={s.product.variable_cost_cents / 100}
+              onChange={(v) => p({ variable_cost_cents: Math.round(v * 100) })}
+              max={1000000}
+              step={0.01}
+            />
+            <Field
+              className="span-2"
+              label={t(
+                "Keywords used for the audience",
+                "Mots-clés utilisés pour le public",
+              )}
+              hint={t(
+                "Optional. These words influence audience profiles; review them when adapting an example.",
+                "Facultatif. Ces mots influencent les profils ; revoyez-les en adaptant un exemple.",
+              )}
+            >
+              <input
+                defaultValue={s.product.keywords.join(", ")}
+                key={s.product.name + "keywords"}
+                onBlur={(e) =>
+                  p({
+                    keywords: e.target.value
+                      .split(",")
+                      .map((x) => x.trim())
+                      .filter(Boolean)
+                      .slice(0, 30),
+                  })
+                }
+              />
+            </Field>
             <NumberField
               label={t("Random seed", "Graine aléatoire")}
               value={s.seed}
@@ -1525,8 +1981,8 @@ function BriefForm({
                 )}
                 <small>
                   {t(
-                    "Optional paid qualitative comments for bounded representatives. Requires a configured model and a positive real API cap. Offline demos do not call AI.",
-                    "Commentaires qualitatifs payants facultatifs pour les représentants limités. Modèle configuré et plafond API positif requis. Les démos hors ligne n’appellent pas d’IA.",
+                    "For the manual preparation/run workflow only. Direct launch stays local. Optional paid qualitative comments for bounded representatives. Requires a configured model and a positive real API cap. Offline demos do not call AI.",
+                    "Réservé au parcours préparation/exécution manuelle. Le lancement direct reste local. Commentaires qualitatifs payants facultatifs pour les représentants limités. Modèle configuré et plafond API positif requis. Les démos hors ligne n’appellent pas d’IA.",
                   )}
                 </small>
               </span>
@@ -1606,24 +2062,6 @@ function BriefForm({
             </Field>
             <Field
               className="span-2"
-              label={t("Product keywords", "Mots-clés du produit")}
-            >
-              <input
-                defaultValue={s.product.keywords.join(", ")}
-                key={s.product.name + "keywords"}
-                onBlur={(e) =>
-                  p({
-                    keywords: e.target.value
-                      .split(",")
-                      .map((x) => x.trim())
-                      .filter(Boolean)
-                      .slice(0, 30),
-                  })
-                }
-              />
-            </Field>
-            <Field
-              className="span-2"
               label={t(
                 "Prerequisites (one per line)",
                 "Prérequis (un par ligne)",
@@ -1644,30 +2082,58 @@ function BriefForm({
                 }
               />
             </Field>
+            {discovery && (
+              <>
+                <NumberField
+                  label={t(
+                    "Assumed existing-solution share",
+                    "Part supposée utilisant déjà une solution",
+                  )}
+                  value={market.incumbent_share}
+                  onChange={(v) => m({ incumbent_share: v })}
+                  max={1}
+                  step={0.05}
+                />
+                <NumberField
+                  label={t(
+                    "Switching friction assumption",
+                    "Hypothèse de frein au changement",
+                  )}
+                  value={market.switching_friction}
+                  onChange={(v) => m({ switching_friction: v })}
+                  max={1}
+                  step={0.05}
+                />
+                <Field
+                  label={t(
+                    "Addressable market size (optional assumption)",
+                    "Taille du marché adressable (hypothèse facultative)",
+                  )}
+                >
+                  <input
+                    type="number"
+                    min={1}
+                    value={market.addressable_population ?? ""}
+                    onChange={(e) =>
+                      m({
+                        addressable_population:
+                          e.target.value === "" ? null : Number(e.target.value),
+                      })
+                    }
+                  />
+                </Field>
+              </>
+            )}
+            <button
+              type="button"
+              className="button secondary span-2"
+              onClick={onPrepare}
+            >
+              {t("Prepare experiment", "Préparer l’expérience")}
+            </button>
           </div>
         )}
       </fieldset>
-      <div className="form-submit">
-        <p>
-          {dirty
-            ? t(
-                "Preparing saves a new experiment with these changes.",
-                "La préparation crée une nouvelle expérience avec ces changements.",
-              )
-            : t(
-                "Offline preparation. No real API spending.",
-                "Préparation hors ligne. Aucun coût API réel.",
-              )}{" "}
-          <span>
-            {t("Seed", "Graine")} {number(s.seed, lang)}
-          </span>
-        </p>
-        <button className="button" type="submit" disabled={busy}>
-          {busy ? <SpinnerGap className="spin" /> : <Flask />}
-          {t("Prepare experiment", "Préparer l’expérience")}
-          <ArrowRight size={18} />
-        </button>
-      </div>
     </form>
   );
 }
@@ -2559,7 +3025,7 @@ function MediaEditor({
             >
               <span className="plan-index">{String.fromCharCode(65 + i)}</span>
               <span className="plan-title">
-                <strong>{plan.name}</strong>
+                <strong>{planName(plan, lang)}</strong>
                 <span>{plan.description}</span>
               </span>
               <span className="plan-summary">
@@ -2581,7 +3047,7 @@ function MediaEditor({
                 <div className="form-grid plan-settings">
                   <Field label={t("Strategy name", "Nom de la stratégie")}>
                     <input
-                      value={plan.name}
+                      value={planName(plan, lang)}
                       onChange={(e) =>
                         editPlan(plan.id, { name: e.target.value })
                       }
@@ -3043,7 +3509,7 @@ function ChannelCatalogue({
   );
 }
 
-function RunMonitor({
+export function RunMonitor({
   run,
   busy,
   onCancel,
@@ -3109,7 +3575,7 @@ function RunMonitor({
               onClick={onResume}
             >
               <Play size={17} />
-              {t("Resume checkpoint", "Reprendre la sauvegarde")}
+              {t("Resume checkpoint", "Reprendre le calcul")}
             </button>
           )}
         </div>
@@ -3138,7 +3604,26 @@ function RunMonitor({
           )}
         </span>
       </div>
-      {run.error && <p className="inline-error">{run.error}</p>}
+      {run.error && (
+        <div className="run-error-summary">
+          <strong>
+            {t(
+              "The calculation stopped. Your experiment is still saved.",
+              "Le calcul s’est arrêté. Votre expérience est toujours enregistrée.",
+            )}
+          </strong>
+          <p>
+            {t(
+              "Already committed steps remain available. Resume the calculation to continue from its saved progress.",
+              "Les étapes déjà enregistrées restent disponibles. Reprenez le calcul pour continuer depuis sa progression sauvegardée.",
+            )}
+          </p>
+          <details>
+            <summary>{t("Technical details", "Détails techniques")}</summary>
+            <pre>{run.error}</pre>
+          </details>
+        </div>
+      )}
     </section>
   );
 }
@@ -3148,225 +3633,261 @@ function Results({ report: r, runId }: { report: Report; runId: string }) {
     lang = useContext(Language);
   const [scenarioId, setScenarioId] = useState(
       r.winner_id ??
-        r.scenarios.find((s) => !s.is_baseline)?.plan_id ??
+        r.scenarios
+          .filter((s) => !s.is_baseline)
+          .sort((a, b) => b.mean_revenue_cents - a.mean_revenue_cents)[0]
+          ?.plan_id ??
         r.scenarios[0]?.plan_id ??
         "",
     ),
     [metric, setMetric] = useState<"revenue" | "units" | "spend">("revenue"),
     [showDaily, setShowDaily] = useState(false);
+  const strategyDetails = useRef<HTMLDetailsElement>(null);
   const chosen =
-      r.scenarios.find((s) => s.plan_id === scenarioId) ?? r.scenarios[0],
-    winner = r.scenarios.find((s) => s.plan_id === r.winner_id);
+    r.scenarios.find((s) => s.plan_id === scenarioId) ?? r.scenarios[0];
   const curr = r.product.currency;
+  const marketAnalysis =
+    r.market_analysis?.objective === "market_discovery"
+      ? r.market_analysis
+      : null;
+  const primaryMarketWarning =
+    !!marketAnalysis &&
+    (r.metadata.product_credibility as { status?: string } | undefined)
+      ?.status !== "ordinary";
   const candidates = r.scenarios.filter((s) => !s.is_baseline);
   return (
     <div className="results">
-      <div className="result-verdict">
-        <div>
-          <span className="chip">
-            {t(
-              "Conditional simulation result",
-              "Résultat de simulation conditionnel",
-            )}
-          </span>
-          <h2>
-            {winner ? winner.name : t("No clear winner", "Aucun gagnant clair")}
-          </h2>
-          <p>{r.winner_reason}</p>
-        </div>
-        <div className="exports">
-          <span>{t("Take the notebook with you", "Emportez le carnet")}</span>
-          <div>
-            {(["csv", "json", "html", "md"] as const).map((format) => (
-              <a
-                className="export-link"
-                key={format}
-                href={`/api/v1/runs/${runId}/export?format=${format}`}
-                download
-              >
-                <DownloadSimple size={16} />
-                {format.toUpperCase()}
-              </a>
-            ))}
-          </div>
-        </div>
+      {marketAnalysis && (
+        <>
+          {primaryMarketWarning && (
+            <CredibilityNotice
+              value={r.metadata.product_credibility}
+              lang={lang}
+            />
+          )}
+          <MarketOverview report={marketAnalysis} lang={lang} currency={curr} />
+        </>
+      )}
+      <ResultOverview
+        report={r}
+        lang={lang}
+        showCredibility={!primaryMarketWarning}
+        onSelect={(id) => {
+          setScenarioId(id);
+          if (strategyDetails.current) strategyDetails.current.open = true;
+          document
+            .querySelector(".scenario-selector")
+            ?.scrollIntoView?.({ block: "start" });
+        }}
+      />
+      <div className="report-export-row">
+        <span>
+          {t("Download the full report", "Télécharger le rapport complet")}
+        </span>
+        {(["csv", "json", "html", "md"] as const).map((format) => (
+          <a
+            key={format}
+            className="export-link"
+            href={`/api/v1/runs/${runId}/export?format=${format}`}
+            download
+          >
+            <DownloadSimple size={16} />
+            {format.toUpperCase()}
+          </a>
+        ))}
       </div>
-      <Notice>
-        {t(
-          "Intervals describe variability under these assumptions; they are not confidence bounds on real-world sales. No campaign or purchase took place.",
-          "Les intervalles décrivent la variabilité sous ces hypothèses ; ils ne bornent pas des ventes réelles. Aucune campagne ni aucun achat n’a eu lieu.",
-        )}
-      </Notice>
-      <section className="worksheet result-comparison">
-        <div className="sheet-header">
-          <h2>{t("Strategy comparison", "Comparaison des stratégies")}</h2>
-          <span className="chip">
-            {number(r.population, lang)} {t("people", "personnes")} · {r.rounds}{" "}
-            {t("days", "jours")}
-          </span>
-        </div>
-        <div
-          className="table-scroll"
-          tabIndex={0}
-          role="region"
-          aria-label={t(
-            "Strategy comparison table",
-            "Tableau de comparaison des stratégies",
-          )}
-        >
-          <table>
-            <thead>
-              <tr>
-                <th>{t("Strategy", "Stratégie")}</th>
-                <th>{t("Price", "Prix")}</th>
-                <th>{t("Mean units", "Unités moyennes")}</th>
-                <th>{t("Mean revenue", "CA moyen")}</th>
-                <th>{t("Revenue interval", "Intervalle du CA")}</th>
-                <th>{t("Media spend", "Dépense média")}</th>
-                <th>{t("All-buyer CAC", "CAC tous acheteurs")}</th>
-                <th>{t("Paid CAC", "CAC payant")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {r.scenarios.map((s) => (
-                <tr
-                  key={s.plan_id}
-                  className={
-                    s.is_baseline
-                      ? "baseline-row"
-                      : s.plan_id === r.winner_id
-                        ? "winner-row"
-                        : ""
-                  }
-                >
-                  <th>
-                    <button
-                      className="table-button"
-                      onClick={() => setScenarioId(s.plan_id)}
-                    >
-                      {s.plan_id === r.winner_id && <CheckCircle size={16} />}{" "}
-                      {s.name}
-                    </button>
-                    <small>
-                      {s.is_baseline
-                        ? t("No-campaign baseline", "Témoin sans campagne")
-                        : t("Campaign candidate", "Stratégie avec campagne")}
-                    </small>
-                  </th>
-                  <td>{money(s.price_cents, curr, lang)}</td>
-                  <td>{number(s.mean_units, lang, 1)}</td>
-                  <td>
-                    <strong>{money(s.mean_revenue_cents, curr, lang)}</strong>
-                  </td>
-                  <td>
-                    {s.revenue_interval_cents
-                      ?.map((v) => money(v, curr, lang, true))
-                      .join(" – ") ?? "—"}
-                  </td>
-                  <td>{money(s.mean_spend_cents, curr, lang)}</td>
-                  <td>{money(s.mean_cac_cents, curr, lang)}</td>
-                  <td>{money(s.mean_paid_cac_cents, curr, lang)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="table-caption">
+      <details className="report-disclosure">
+        <summary>
           {t(
-            "— means the denominator is zero or the metric does not apply. CAC = virtual media spend / qualifying unique buyers.",
-            "— indique un dénominateur nul ou une mesure non applicable. CAC = dépense média virtuelle / acheteurs uniques concernés.",
+            "Detailed figures, baselines and uncertainty",
+            "Chiffres détaillés, témoins et incertitude",
           )}
-        </p>
-      </section>
-      <section className="worksheet chart-section">
-        <div className="sheet-header">
-          <h2>{t("How the launch unfolded", "Le déroulé du lancement")}</h2>
-          <div
-            className="segmented"
-            aria-label={t("Chart measure", "Mesure du graphique")}
-          >
-            {(["revenue", "units", "spend"] as const).map((m, i) => (
-              <button
-                key={m}
-                className={metric === m ? "selected" : ""}
-                onClick={() => setMetric(m)}
-              >
-                {
-                  [
-                    t("Revenue", "CA"),
-                    t("Units", "Unités"),
-                    t("Spend", "Dépenses"),
-                  ][i]
-                }
-              </button>
-            ))}
+        </summary>
+        <section className="worksheet result-comparison">
+          <div className="sheet-header">
+            <h2>{t("Strategy comparison", "Comparaison des stratégies")}</h2>
+            <span className="chip">
+              {number(r.population, lang)} {t("people", "personnes")} ·{" "}
+              {r.rounds} {t("days", "jours")}
+            </span>
           </div>
-        </div>
-        <LaunchChart scenarios={candidates} metric={metric} currency={curr} />
-        <div className="chart-bottom">
-          <div className="chart-legend">
-            {candidates.map((s, i) => (
-              <span key={s.plan_id}>
-                <i
-                  style={{ background: chartColors[i % chartColors.length] }}
-                />
-                {s.name}
-              </span>
-            ))}
-          </div>
-          <button
-            className="text-button"
-            aria-expanded={showDaily}
-            onClick={() => setShowDaily(!showDaily)}
-          >
-            {showDaily
-              ? t("Hide daily table", "Masquer le tableau quotidien")
-              : t("Show daily table", "Afficher le tableau quotidien")}
-          </button>
-        </div>
-        {showDaily && (
           <div
             className="table-scroll"
             tabIndex={0}
             role="region"
             aria-label={t(
-              "Daily scenario data",
-              "Données quotidiennes des scénarios",
+              "Strategy comparison table",
+              "Tableau de comparaison des stratégies",
             )}
           >
             <table>
               <thead>
                 <tr>
-                  <th>{t("Day", "Jour")}</th>
                   <th>{t("Strategy", "Stratégie")}</th>
-                  <th>{t("Units", "Unités")}</th>
-                  <th>{t("Revenue", "CA")}</th>
-                  <th>{t("Spend", "Dépenses")}</th>
-                  <th>{t("Intention", "Intention")}</th>
-                  <th>{t("Fatigue", "Fatigue")}</th>
+                  <th>{t("Price", "Prix")}</th>
+                  <th>{t("Mean units", "Unités moyennes")}</th>
+                  <th>{t("Mean revenue", "CA moyen")}</th>
+                  <th>{t("Revenue interval", "Intervalle du CA")}</th>
+                  <th>{t("Media spend", "Dépense média")}</th>
+                  <th>{t("All-buyer CAC", "CAC tous acheteurs")}</th>
+                  <th>{t("Paid CAC", "CAC payant")}</th>
                 </tr>
               </thead>
               <tbody>
-                {candidates.flatMap((s) =>
-                  s.daily.map((d) => (
-                    <tr key={`${s.plan_id}-${d.day}`}>
-                      <td>{d.day}</td>
-                      <th>{s.name}</th>
-                      <td>{number(d.units, lang, 1)}</td>
-                      <td>{money(d.revenue_cents, curr, lang)}</td>
-                      <td>{money(d.spend_cents, curr, lang)}</td>
-                      <td>{percent(d.mean_intention, lang)}</td>
-                      <td>{percent(d.mean_fatigue, lang)}</td>
-                    </tr>
-                  )),
-                )}
+                {r.scenarios.map((s) => (
+                  <tr
+                    key={s.plan_id}
+                    className={
+                      s.is_baseline
+                        ? "baseline-row"
+                        : s.plan_id === r.winner_id
+                          ? "winner-row"
+                          : ""
+                    }
+                  >
+                    <th>
+                      <button
+                        className="table-button"
+                        onClick={() => setScenarioId(s.plan_id)}
+                      >
+                        {s.plan_id === r.winner_id && <CheckCircle size={16} />}{" "}
+                        {planName(s, lang)}
+                      </button>
+                      <small>
+                        {s.is_baseline
+                          ? t("No-campaign baseline", "Témoin sans campagne")
+                          : t("Campaign candidate", "Stratégie avec campagne")}
+                      </small>
+                    </th>
+                    <td>{money(s.price_cents, curr, lang)}</td>
+                    <td>{number(s.mean_units, lang, 1)}</td>
+                    <td>
+                      <strong>{money(s.mean_revenue_cents, curr, lang)}</strong>
+                    </td>
+                    <td>
+                      {s.revenue_interval_cents
+                        ?.map((v) => money(v, curr, lang, true))
+                        .join(" – ") ?? "—"}
+                    </td>
+                    <td>{money(s.mean_spend_cents, curr, lang)}</td>
+                    <td>{money(s.mean_cac_cents, curr, lang)}</td>
+                    <td>{money(s.mean_paid_cac_cents, curr, lang)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
-        )}
-      </section>
+          <p className="table-caption">
+            {t(
+              "— means the denominator is zero or the metric does not apply. CAC = virtual media spend / qualifying unique buyers.",
+              "— indique un dénominateur nul ou une mesure non applicable. CAC = dépense média virtuelle / acheteurs uniques concernés.",
+            )}
+          </p>
+        </section>
+      </details>
+      <details className="report-disclosure">
+        <summary>
+          {t(
+            "Daily evolution of the experiment",
+            "Évolution quotidienne de l’expérience",
+          )}
+        </summary>
+        <section className="worksheet chart-section">
+          <div className="sheet-header">
+            <h2>{t("How the launch unfolded", "Le déroulé du lancement")}</h2>
+            <div
+              className="segmented"
+              aria-label={t("Chart measure", "Mesure du graphique")}
+            >
+              {(["revenue", "units", "spend"] as const).map((m, i) => (
+                <button
+                  key={m}
+                  className={metric === m ? "selected" : ""}
+                  onClick={() => setMetric(m)}
+                >
+                  {
+                    [
+                      t("Revenue", "CA"),
+                      t("Units", "Unités"),
+                      t("Spend", "Dépenses"),
+                    ][i]
+                  }
+                </button>
+              ))}
+            </div>
+          </div>
+          <LaunchChart scenarios={candidates} metric={metric} currency={curr} />
+          <div className="chart-bottom">
+            <div className="chart-legend">
+              {candidates.map((s, i) => (
+                <span key={s.plan_id}>
+                  <i
+                    style={{ background: chartColors[i % chartColors.length] }}
+                  />
+                  {planName(s, lang)}
+                </span>
+              ))}
+            </div>
+            <button
+              className="text-button"
+              aria-expanded={showDaily}
+              onClick={() => setShowDaily(!showDaily)}
+            >
+              {showDaily
+                ? t("Hide daily table", "Masquer le tableau quotidien")
+                : t("Show daily table", "Afficher le tableau quotidien")}
+            </button>
+          </div>
+          {showDaily && (
+            <div
+              className="table-scroll"
+              tabIndex={0}
+              role="region"
+              aria-label={t(
+                "Daily scenario data",
+                "Données quotidiennes des scénarios",
+              )}
+            >
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t("Day", "Jour")}</th>
+                    <th>{t("Strategy", "Stratégie")}</th>
+                    <th>{t("Units", "Unités")}</th>
+                    <th>{t("Revenue", "CA")}</th>
+                    <th>{t("Spend", "Dépenses")}</th>
+                    <th>{t("Intention", "Intention")}</th>
+                    <th>{t("Fatigue", "Fatigue")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {candidates.flatMap((s) =>
+                    s.daily.map((d) => (
+                      <tr key={`${s.plan_id}-${d.day}`}>
+                        <td>{d.day}</td>
+                        <th>{planName(s, lang)}</th>
+                        <td>{number(d.units, lang, 1)}</td>
+                        <td>{money(d.revenue_cents, curr, lang)}</td>
+                        <td>{money(d.spend_cents, curr, lang)}</td>
+                        <td>{percent(d.mean_intention, lang)}</td>
+                        <td>{percent(d.mean_fatigue, lang)}</td>
+                      </tr>
+                    )),
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </details>
       {chosen && (
-        <>
+        <details className="report-disclosure" ref={strategyDetails}>
+          <summary>
+            {t(
+              "Channel attribution and strategy details",
+              "Attribution par canal et détail de la stratégie",
+            )}
+          </summary>
           <div className="scenario-selector">
             <h2>
               {t("Look inside a strategy", "À l’intérieur d’une stratégie")}
@@ -3378,7 +3899,7 @@ function Results({ report: r, runId }: { report: Report; runId: string }) {
               >
                 {r.scenarios.map((s) => (
                   <option key={s.plan_id} value={s.plan_id}>
-                    {s.name}
+                    {planName(s, lang)}
                     {s.is_baseline ? ` · ${t("baseline", "témoin")}` : ""}
                   </option>
                 ))}
@@ -3422,129 +3943,147 @@ function Results({ report: r, runId }: { report: Report; runId: string }) {
             </dl>
           </div>
           <ChannelTable scenario={chosen} currency={curr} />
-          <div className="detail-columns">
-            <section className="worksheet">
-              <div className="sheet-header">
-                <h3>{t("Adaptive changes", "Ajustements adaptatifs")}</h3>
-                <span>{chosen.adjustments?.length ?? 0}</span>
-              </div>
-              <div className="padded">
-                {chosen.adjustments?.length ? (
-                  <RecordList
-                    records={chosen.adjustments}
-                    label={t("Adjustment", "Ajustement")}
-                  />
-                ) : (
-                  <p className="muted">
-                    {t(
-                      "No adaptive changes were made in this scenario.",
-                      "Aucun ajustement adaptatif dans ce scénario.",
-                    )}
-                  </p>
-                )}
-              </div>
-            </section>
-            <section className="worksheet">
-              <div className="sheet-header">
-                <h3>{t("Individual traces", "Trajectoires individuelles")}</h3>
-                <span>{chosen.traces?.length ?? 0}</span>
-              </div>
-              <div className="padded">
-                <p className="muted small">
-                  {t(
-                    "A bounded inspection sample. Exposure, intention and purchase remain distinct events.",
-                    "Un échantillon d’inspection limité. Exposition, intention et achat restent distincts.",
+          <details className="report-disclosure">
+            <summary>
+              {t(
+                "Adaptive changes and individual traces",
+                "Ajustements et trajectoires individuelles",
+              )}
+            </summary>
+            <div className="detail-columns">
+              <section className="worksheet">
+                <div className="sheet-header">
+                  <h3>{t("Adaptive changes", "Ajustements adaptatifs")}</h3>
+                  <span>{chosen.adjustments?.length ?? 0}</span>
+                </div>
+                <div className="padded">
+                  {chosen.adjustments?.length ? (
+                    <RecordList
+                      records={chosen.adjustments}
+                      label={t("Adjustment", "Ajustement")}
+                    />
+                  ) : (
+                    <p className="muted">
+                      {t(
+                        "No adaptive changes were made in this scenario.",
+                        "Aucun ajustement adaptatif dans ce scénario.",
+                      )}
+                    </p>
                   )}
-                </p>
-                {chosen.traces?.length ? (
-                  <RecordList
-                    records={chosen.traces}
-                    label={t("Trace", "Trajectoire")}
-                  />
-                ) : (
-                  <p className="muted">
+                </div>
+              </section>
+              <section className="worksheet">
+                <div className="sheet-header">
+                  <h3>
+                    {t("Individual traces", "Trajectoires individuelles")}
+                  </h3>
+                  <span>{chosen.traces?.length ?? 0}</span>
+                </div>
+                <div className="padded">
+                  <p className="muted small">
                     {t(
-                      "No representative trace is available for this scenario.",
-                      "Aucune trajectoire représentative disponible pour ce scénario.",
+                      "A bounded inspection sample. Exposure, intention and purchase remain distinct events.",
+                      "Un échantillon d’inspection limité. Exposition, intention et achat restent distincts.",
                     )}
                   </p>
-                )}
-              </div>
-            </section>
-          </div>
-        </>
+                  {chosen.traces?.length ? (
+                    <RecordList
+                      records={chosen.traces}
+                      label={t("Trace", "Trajectoire")}
+                    />
+                  ) : (
+                    <p className="muted">
+                      {t(
+                        "No representative trace is available for this scenario.",
+                        "Aucune trajectoire représentative disponible pour ce scénario.",
+                      )}
+                    </p>
+                  )}
+                </div>
+              </section>
+            </div>
+          </details>
+        </details>
       )}
-      <section className="methodology worksheet">
-        <div className="sheet-header">
-          <h2>
-            {t(
-              "Assumptions & reproducibility",
-              "Hypothèses et reproductibilité",
-            )}
-          </h2>
-          <span className="chip">{r.engine_version}</span>
-        </div>
-        <div className="padded">
-          <dl className="inline-meta">
-            <div>
-              <dt>{t("Seed", "Graine")}</dt>
-              <dd>{r.seed}</dd>
-            </div>
-            <div>
-              <dt>{t("Schema", "Schéma")}</dt>
-              <dd>{r.schema_version}</dd>
-            </div>
-            <div>
-              <dt>{t("Population", "Population")}</dt>
-              <dd>{number(r.population, lang)}</dd>
-            </div>
-          </dl>
-          <ul>
-            {r.assumptions.map((a, i) => (
-              <li key={i}>{a}</li>
-            ))}
-          </ul>
-          <details>
-            <summary>
-              {t("Comparison details", "Détails des comparaisons")}
-            </summary>
-            <pre>{plain(r.comparisons)}</pre>
-          </details>
-          {Array.isArray(r.metadata.semantic_reactions) &&
-            r.metadata.semantic_reactions.length > 0 && (
-              <details open>
-                <summary>
-                  {t(
-                    "Optional AI representative reactions",
-                    "Réactions représentatives IA facultatives",
-                  )}
-                </summary>
-                <p className="muted small">
-                  {t(
-                    "Qualitative, synthetic comments grounded in the experiment. They are not customer interviews.",
-                    "Commentaires qualitatifs synthétiques fondés sur l’expérience. Ce ne sont pas des entretiens clients.",
-                  )}
-                </p>
-                <RecordList
-                  records={
-                    r.metadata.semantic_reactions as Record<string, unknown>[]
-                  }
-                  label={t("Reaction", "Réaction")}
-                />
-              </details>
-            )}
-          <details>
-            <summary>
-              {t("Execution metadata", "Métadonnées d’exécution")}
-            </summary>
-            <pre>{plain(r.metadata)}</pre>
-          </details>
-        </div>
-      </section>
+      <details className="report-disclosure">
+        <summary>
+          {t(
+            "Model assumptions, method and provenance",
+            "Hypothèses, méthode et traçabilité",
+          )}
+        </summary>
+        <section className="methodology worksheet">
+          <div className="sheet-header">
+            <h2>
+              {t(
+                "Assumptions & reproducibility",
+                "Hypothèses et reproductibilité",
+              )}
+            </h2>
+            <span className="chip">{r.engine_version}</span>
+          </div>
+          <div className="padded">
+            <dl className="inline-meta">
+              <div>
+                <dt>{t("Seed", "Graine")}</dt>
+                <dd>{r.seed}</dd>
+              </div>
+              <div>
+                <dt>{t("Schema", "Schéma")}</dt>
+                <dd>{r.schema_version}</dd>
+              </div>
+              <div>
+                <dt>{t("Population", "Population")}</dt>
+                <dd>{number(r.population, lang)}</dd>
+              </div>
+            </dl>
+            <ul>
+              {r.assumptions.map((a, i) => (
+                <li key={i}>{a}</li>
+              ))}
+            </ul>
+            <details>
+              <summary>
+                {t("Comparison details", "Détails des comparaisons")}
+              </summary>
+              <pre>{plain(r.comparisons)}</pre>
+            </details>
+            {Array.isArray(r.metadata.semantic_reactions) &&
+              r.metadata.semantic_reactions.length > 0 && (
+                <details open>
+                  <summary>
+                    {t(
+                      "Optional AI representative reactions",
+                      "Réactions représentatives IA facultatives",
+                    )}
+                  </summary>
+                  <p className="muted small">
+                    {t(
+                      "Qualitative, synthetic comments grounded in the experiment. They are not customer interviews.",
+                      "Commentaires qualitatifs synthétiques fondés sur l’expérience. Ce ne sont pas des entretiens clients.",
+                    )}
+                  </p>
+                  <RecordList
+                    records={
+                      r.metadata.semantic_reactions as Record<string, unknown>[]
+                    }
+                    label={t("Reaction", "Réaction")}
+                  />
+                </details>
+              )}
+            <details>
+              <summary>
+                {t("Execution metadata", "Métadonnées d’exécution")}
+              </summary>
+              <pre>{plain(r.metadata)}</pre>
+            </details>
+          </div>
+        </section>
+      </details>
     </div>
   );
 }
-const chartColors = ["#214cfa", "#087568", "#b6630a"];
+const chartColors = ["#e2440e", "#171717", "#8b806b"];
 function LaunchChart({
   scenarios,
   metric,
@@ -3656,7 +4195,7 @@ function ChannelTable({
     <section className="worksheet">
       <div className="sheet-header">
         <h3>{t("Channel attribution", "Attribution par canal")}</h3>
-        <span className="chip">{s.name}</span>
+        <span className="chip">{planName(s, lang)}</span>
       </div>
       {s.channels?.length ? (
         <div
